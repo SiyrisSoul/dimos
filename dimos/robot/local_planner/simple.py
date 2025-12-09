@@ -45,6 +45,18 @@ from dimos.utils.threadpool import get_scheduler
 logger = setup_logger("dimos.robot.unitree.local_planner")
 
 
+def vector_to_twist(vector: Vector3) -> Twist:
+    """Convert a Vector3 to a Twist message."""
+    twist = Twist()
+    twist.linear.x = vector.x
+    twist.linear.y = vector.y
+    twist.linear.z = 0.0
+    twist.angular.x = 0.0
+    twist.angular.y = 0.0
+    twist.angular.z = vector.z
+    return twist
+
+
 class SimplePlanner(Module):
     path: In[Path] = None
     movecmd: Out[Twist] = None
@@ -58,8 +70,7 @@ class SimplePlanner(Module):
 
     def move_stream(self, frequency: float = 20.0) -> rx.Observable:
         return rx.interval(1.0 / frequency, scheduler=get_scheduler()).pipe(
-            ops.filter(lambda _: self.goal is not None),
-            ops.filter(lambda _: self.tf.get("world", "base_link")),
+            ops.filter(lambda _: self.tf.get("world", "base_link") and self.goal),
             ops.map(lambda base_link: self.goal @ base_link),
             ops.map(lambda direction: direction.normalize() * self.speed),
         )

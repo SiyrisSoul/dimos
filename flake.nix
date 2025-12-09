@@ -62,6 +62,7 @@
             export DISPLAY=:0
 
             PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")
+            export PATH="$PROJECT_ROOT/bin:$PATH"
             if [ -f "$PROJECT_ROOT/env/bin/activate" ]; then
               . "$PROJECT_ROOT/env/bin/activate"
             fi

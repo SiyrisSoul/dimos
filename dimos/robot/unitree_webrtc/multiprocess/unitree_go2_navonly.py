@@ -14,24 +14,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import functools
 import logging
 import os
+import pickle
 import threading
 import time
 import warnings
 from typing import Callable, Optional
 
+import reactivex as rx
 from reactivex import Observable
 from reactivex import operators as ops
 
 import dimos.core.colors as colors
 from dimos import core
 from dimos.core import In, Module, Out, rpc
-from dimos.msgs.geometry_msgs import Pose, PoseStamped, Transform, Vector3
+from dimos.msgs.geometry_msgs import Pose, PoseStamped, Quaternion, Transform, Vector3
 from dimos.msgs.nav_msgs import OccupancyGrid, Path
-from dimos.msgs.sensor_msgs import Image
+from dimos.msgs.sensor_msgs import Image, PointCloud2
 from dimos.perception.spatial_perception import SpatialMemory
 from dimos.protocol import pubsub
 from dimos.protocol.tf import TF
@@ -51,6 +52,7 @@ from dimos.utils.data import get_data
 from dimos.utils.logging_config import setup_logger
 from dimos.utils.reactive import getter_streaming
 from dimos.utils.testing import TimedSensorReplay
+from dimos.utils.threadpool import get_scheduler
 
 logger = setup_logger("dimos.robot.unitree_webrtc.multiprocess.unitree_go2", level=logging.INFO)
 
@@ -59,16 +61,16 @@ logging.getLogger("aiortc.codecs.h264").setLevel(logging.ERROR)
 logging.getLogger("lcm_foxglove_bridge").setLevel(logging.ERROR)
 logging.getLogger("websockets.server").setLevel(logging.ERROR)
 logging.getLogger("FoxgloveServer").setLevel(logging.ERROR)
-logging.getLogger("asyncio").setLevel(logging.ERROR)
-logging.getLogger("root").setLevel(logging.WARNING)
+# logging.getLogger("asyncio").setLevel(logging.ERROR)
+# logging.getLogger("root").setLevel(logging.WARNING)
 
 # Suppress warnings
-warnings.filterwarnings("ignore", message="coroutine.*was never awaited")
+# warnings.filterwarnings("ignore", message="coroutine.*was never awaited")
 warnings.filterwarnings("ignore", message="H264Decoder.*failed to decode")
 
 
 # can be swapped in for UnitreeWebRTCConnection
-class FakeRTC(UnitreeWebRTCConnection):
+class ReplayRTC(UnitreeWebRTCConnection):
     def __init__(self, *args, **kwargs):
         # ensures we download msgs from lfs store
         data = get_data("unitree_office_walk")
@@ -104,7 +106,51 @@ class FakeRTC(UnitreeWebRTCConnection):
         # print("move supressed", vector)
 
 
-class ConnectionModule(FakeRTC, Module):
+# can be swapped in for UnitreeWebRTCConnection
+class SimRTC(UnitreeWebRTCConnection):
+    _pos: PoseStamped = None
+
+    def __init__(self, *args, **kwargs):
+        # ensures we download msgs from lfs store
+        data = get_data("unitree_office_walk")
+        self._pos = PoseStamped(
+            ts=time.time(),
+            frame_id="world",
+            position=Vector3(5.8, -9.3, 0.3),
+            orientation=Quaternion(),
+        )
+
+    def connect(self): ...
+
+    def standup(self):
+        print("standup supressed")
+
+    def liedown(self):
+        print("liedown supressed")
+
+    @functools.cache
+    def lidar_stream(self):
+        file_path = get_data("lcm_msgs") / "sensor_msgs/PointCloud2.pickle"
+        with open(file_path, "rb") as f:
+            pointcloud = PointCloud2.lcm_decode(pickle.loads(f.read()))
+
+        return rx.interval(1, scheduler=get_scheduler()).pipe(
+            ops.take(5), ops.map(lambda _: pointcloud)
+        )
+
+    @functools.cache
+    def odom_stream(self):
+        return rx.interval(0.05, scheduler=get_scheduler()).pipe(ops.map(lambda _: self._pos))
+
+    @functools.cache
+    def video_stream(self):
+        return Observable()
+
+    def move(self, vector: Vector):
+        self._pos.position = self._pos.position + vector
+
+
+class ConnectionModule(SimRTC, Module):
     movecmd: In[Vector3] = None
     odom: Out[Vector3] = None
     lidar: Out[LidarMessage] = None
@@ -155,6 +201,7 @@ class ConnectionModule(FakeRTC, Module):
 
 class ControlModule(Module):
     plancmd: Out[Pose] = None
+    movecmd: Out[Vector3] = None
 
     @rpc
     def start(self):
@@ -170,8 +217,16 @@ class ControlModule(Module):
                     )
                 )
 
-        thread = threading.Thread(target=plancmd, daemon=True)
-        thread.start()
+        def movcmd():
+            while True:
+                time.sleep(0.1)
+                self.movecmd.publish(Vector3(-0.05, 0.05, 0))
+
+        thread1 = threading.Thread(target=plancmd, daemon=True)
+        thread1.start()
+
+        thread2 = threading.Thread(target=movcmd, daemon=True)
+        thread2.start()
 
 
 class UnitreeGo2Light:
@@ -182,14 +237,12 @@ class UnitreeGo2Light:
 
     def start(self):
         dimos = core.start(4)
-
         connection = dimos.deploy(ConnectionModule, self.ip)
         connection.lidar.transport = core.LCMTransport("/lidar", LidarMessage)
         connection.odom.transport = core.LCMTransport("/odom", PoseStamped)
         connection.video.transport = core.LCMTransport("/video", Image)
-        connection.movecmd.transport = core.LCMTransport("/mov", Vector3)
 
-        mapper = dimos.deploy(Map, voxel_size=0.5, global_publish_interval=2.5)
+        mapper = dimos.deploy(Map, voxel_size=0.05, global_publish_interval=2.5)
 
         mapper.global_map.transport = core.LCMTransport("/global_map", LidarMessage)
         mapper.global_costmap.transport = core.LCMTransport("/global_costmap", OccupancyGrid)
@@ -202,12 +255,16 @@ class UnitreeGo2Light:
             get_robot_pos=connection.get_pos,
             set_local_nav=print,
         )
+        global_planner.path.transport = core.LCMTransport("/global_path", Path)
 
         ctrl = dimos.deploy(ControlModule)
 
+        ctrl.movecmd.transport = core.LCMTransport("/mov", Vector3)
+        connection.movecmd.connect(ctrl.movecmd)
+
         ctrl.plancmd.transport = core.LCMTransport("/global_target", PoseStamped)
-        global_planner.path.transport = core.LCMTransport("/global_path", Path)
         global_planner.target.connect(ctrl.plancmd)
+
         foxglove_bridge = FoxgloveBridge()
 
         connection.start()
