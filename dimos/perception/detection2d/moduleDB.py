@@ -13,7 +13,8 @@
 # limitations under the License.
 import functools
 import time
-from typing import List, Optional, Tuple
+from collections import defaultdict
+from typing import Dict, Generator, List, Optional, Tuple, TypedDict
 
 import numpy as np
 from dimos_lcm.foxglove_msgs.ImageAnnotations import (
@@ -36,21 +37,63 @@ from dimos.perception.detection2d.type import (
     ImageDetections3D,
 )
 from dimos.protocol.skill import skill
+from dimos.protocol.skill.skill import skill
+from dimos.protocol.skill.type import Output, Reducer, Stream
+
+LabelDB = Dict[str, "DetectionLabel"]
+
+
+class DetectionLabel:
+    name: str
+    instances: List[Detection3D]
+
+    def __init__(self, name: str):
+        self.name = name
+        self.instances = []
+
+    def add_detection(self, detection: Detection3D):
+        self.instances.append(detection)
 
 
 class DetectionDBModule(Detection3DModule):
+    labels: LabelDB
+
+    def __init__(
+        self,
+    ):
+        super().__init__(self)
+        self.labels = {}
+
     @rpc
     def start(self):
         super().start()
         self.pointcloud_stream().subscribe(self.add_detections)
 
-    def add_detections(self, detections: List[Detection3DArray]):
+    def add_detections(self, detections: ImageDetections3D):
         for det in detections:
             self.add_detection(det)
 
     def add_detection(self, detection: Detection3D):
-        print("DETECTION", detection)
+        if detection.name not in self.labels:
+            self.labels[detection.name] = DetectionLabel(detection.name)
+        self.labels[detection.name].add_detection(detection)
 
-    def lookup(self, label: str) -> List[Detection3D]:
-        """Look up a detection by label."""
-        return []
+    @skill
+    def list_object_labels(self) -> List[str]:
+        """List all detected object labels (e.g., "person", "car", "bottle")."""
+
+    @skill
+    def goto_object(self, label_or_id: str):
+        """
+        Navigate to a specific object by its label or id.
+        If there are multiple objects with the same label, you will get a list of object details and their ids
+        so you can call goto_object again with a specific id.
+        """
+
+    @skill
+    def get_object_picture(self, label_or_id: str) -> Image:
+        """Get the cropped image of a specific object by its unique identity."""
+
+    @skill(stream=Stream.passive, reducer=Reducer.accumulate_dict)
+    def detected_object_stream(self) -> Generator[Detection3D]:
+        """Stream of all detected objects between agent invocations."""

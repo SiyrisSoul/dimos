@@ -17,7 +17,7 @@ from __future__ import annotations
 import functools
 import hashlib
 from dataclasses import dataclass
-from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar
+from typing import Any, Dict, Generic, List, Tuple, TypeVar
 
 import numpy as np
 from dimos_lcm.foxglove_msgs.Color import Color
@@ -318,16 +318,9 @@ class Detection3D(Detection2D):
     pointcloud: PointCloud2
     transform: Transform
 
-    def localize(self, pointcloud: PointCloud2) -> Detection3D:
-        self.pointcloud = pointcloud
-        return self
-
     @functools.cached_property
     def center(self) -> Vector3:
-        """Calculate the center of the pointcloud in world frame."""
-        points = np.asarray(self.pointcloud.pointcloud.points)
-        center = points.mean(axis=0)
-        return Vector3(*center)
+        return Vector3(self.pointcloud.get_center())
 
     @functools.cached_property
     def pose(self) -> PoseStamped:

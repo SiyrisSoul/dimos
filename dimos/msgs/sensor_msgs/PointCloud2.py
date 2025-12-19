@@ -66,6 +66,12 @@ class PointCloud2(Timestamped):
     def points(self):
         return self.pointcloud.points
 
+    def get_center(self):
+        return self.pointcloud.get_center()
+
+    def get_oriented_bounding_box(self):
+        return self.pointcloud.get_oriented_bounding_box()
+
     # TODO what's the usual storage here? is it already numpy?
     def as_numpy(self) -> np.ndarray:
         """Get points as numpy array."""

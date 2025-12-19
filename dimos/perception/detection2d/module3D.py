@@ -184,14 +184,10 @@ class Detection3DModule(Detection2DModule):
         camera_position = camera_transform.inverse().translation
         camera_pos_np = camera_position.to_numpy().reshape(3, 1)
 
-        pcd = pc.pointcloud
-        try:
-            _, visible_indices = pcd.hidden_point_removal(camera_pos_np, radius)
-            visible_pcd = pcd.select_by_index(visible_indices)
+        _, visible_indices = pc.pointcloud.hidden_point_removal(camera_pos_np, radius)
+        visible_pcd = pc.pointcloud.select_by_index(visible_indices)
 
-            return PointCloud2(visible_pcd, frame_id=pc.frame_id, ts=pc.ts)
-        except Exception as e:
-            return pc
+        return PointCloud2(visible_pcd, frame_id=pc.frame_id, ts=pc.ts)
 
     def cleanup_pointcloud(self, pc: PointCloud2) -> PointCloud2:
         height = pc.filter_by_height(-0.05)

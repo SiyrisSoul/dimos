@@ -13,7 +13,6 @@
 # limitations under the License.
 import functools
 import glob
-import logging
 import os
 import pickle
 import re
