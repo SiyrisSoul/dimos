@@ -314,7 +314,7 @@ class Detection2D(Timestamped):
                     )
                 )
             ],
-            id=str(self.track_id),
+            id=self.name,
         )
 
 
