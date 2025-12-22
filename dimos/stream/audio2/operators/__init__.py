@@ -14,9 +14,10 @@
 
 """Audio processing operators."""
 
+from dimos.stream.audio2.operators.effects import robotize
 from dimos.stream.audio2.operators.gst_normalizer import normalizer
 from dimos.stream.audio2.operators.gst_vumeter import vumeter
 from dimos.stream.audio2.operators.raw_normalizer import raw_normalizer
 from dimos.stream.audio2.operators.raw_vumeter import raw_vumeter
 
-__all__ = ["normalizer", "vumeter", "raw_normalizer", "raw_vumeter"]
+__all__ = ["normalizer", "vumeter", "raw_normalizer", "raw_vumeter", "robotize"]
