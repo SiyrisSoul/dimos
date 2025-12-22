@@ -36,8 +36,15 @@ Modules:
     - types: Core data types (AudioEvent, AudioSpec, AudioFormat)
 """
 
-# Modules for high-level usage
-from dimos.stream.audio2.module import RemoteSpeechModule, SpeechModule
+# Modules for high-level usage (optional - requires dimos.agents2)
+try:
+    from dimos.stream.audio2.module import RemoteSpeechModule, SpeechModule
+
+    _MODULES_AVAILABLE = True
+except ImportError:
+    _MODULES_AVAILABLE = False
+    SpeechModule = None
+    RemoteSpeechModule = None
 
 # Input sources
 from dimos.stream.audio2.input import (
@@ -48,6 +55,7 @@ from dimos.stream.audio2.input import (
     pyttsx3_tts,
     signal,
 )
+from dimos.stream.audio2.input.signal import WaveformType
 
 # Operators (effects and processing)
 from dimos.stream.audio2.operators import (
@@ -81,6 +89,7 @@ __all__ = [
     "openai_tts",
     "pyttsx3_tts",
     "Voice",
+    "WaveformType",
     # Operators
     "normalizer",
     "vumeter",
