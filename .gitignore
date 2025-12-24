@@ -51,4 +51,4 @@ yolo11n.pt
 
 # VR SSL Certificates
 assets/vr/certificates/*.pem
-dimos/vr/certificates/*.key
+assets/vr/certificates/*.key
