@@ -16,27 +16,27 @@
 Spatial Memory module for creating a semantic map of the environment.
 """
 
-import uuid
-import time
 import os
-from typing import Dict, List, Optional, Any
+import time
+import uuid
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
-import numpy as np
 import cv2
+import numpy as np
 from reactivex import Observable, disposable, interval
 from reactivex import operators as ops
-from datetime import datetime
 from reactivex.disposable import Disposable
 
-from dimos.core import In, Module, rpc
-from dimos.msgs.sensor_msgs import Image
-from dimos.msgs.geometry_msgs import Vector3, Pose, PoseStamped
-from dimos.utils.logging_config import setup_logger
-from dimos.agents.memory.spatial_vector_db import SpatialVectorDB
 from dimos.agents.memory.image_embedding import ImageEmbeddingProvider
+from dimos.agents.memory.spatial_vector_db import SpatialVectorDB
 from dimos.agents.memory.visual_memory import VisualMemory
-from dimos.types.vector import Vector
+from dimos.core import In, Module, rpc
+from dimos.msgs.geometry_msgs import Pose, PoseStamped, Vector3
+from dimos.msgs.sensor_msgs import Image
 from dimos.types.robot_location import RobotLocation
+from dimos.types.vector import Vector
+from dimos.utils.logging_config import setup_logger
 
 logger = setup_logger(__file__)
 
@@ -120,8 +120,8 @@ class SpatialMemory(Module):
                 except Exception as e:
                     logger.error(f"Error clearing ChromaDB directory: {e}")
 
-            from chromadb.config import Settings
             import chromadb
+            from chromadb.config import Settings
 
             self._chroma_client = chromadb.PersistentClient(
                 path=db_path, settings=Settings(anonymized_telemetry=False)
@@ -180,6 +180,7 @@ class SpatialMemory(Module):
 
         # Subscribe to LCM streams
         def set_video(image_msg: Image):
+            #            print("Received video frame", image_msg)
             # Convert Image message to numpy array
             if hasattr(image_msg, "data"):
                 frame = image_msg.data
@@ -189,6 +190,7 @@ class SpatialMemory(Module):
                 logger.warning("Received image message without data attribute")
 
         def set_odom(odom_msg: PoseStamped):
+            #            print("Received odom message", odom_msg)
             self._latest_odom = odom_msg
 
         unsub = self.color_image.subscribe(set_video)
