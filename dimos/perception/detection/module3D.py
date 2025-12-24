@@ -60,6 +60,10 @@ class Detection3DModule(Detection2DModule):
 
     detection_3d_stream: Optional[Observable[ImageDetections3DPC]] = None
 
+    def __init__(self, goto=None, **kwargs):
+        super().__init__(**kwargs)
+        self.goto = goto
+
     def process_frame(
         self,
         detections: ImageDetections2D,
@@ -82,8 +86,8 @@ class Detection3DModule(Detection2DModule):
 
         return ImageDetections3DPC(detections.image, detection3d_list)
 
-    @rpc
-    def query_vlm(self, question: str) -> ImageDetections3DPC:
+    @skill()
+    def navigate_to_object(self, question: str) -> str:
         """
         query visual model about the view in front of the camera
         you can ask to mark objects like:
@@ -91,19 +95,20 @@ class Detection3DModule(Detection2DModule):
         "red cup on the table left of the pencil"
         "laptop on the desk"
         "a person wearing a red shirt"
-        """
-        from dimos.models.vl.moondream import MoondreamVlModel
 
-        model = MoondreamVlModel()
+        and then navigate towars the object
+        """
+        from dimos.models.vl import QwenVlModel
+
+        model = QwenVlModel()
         image = self.image.get_next()
-        print("GOT IMAGE FRAME", image)
         result = model.query_detections(image, question)
 
-        print("VLM RESULT:", result)
+        print("vlm result:", result)
         if isinstance(result, str) or not result or not len(result):
             return "No detections"
 
-        self.annotations.publish(result.to_foxglove_annotations())
+        # self.annotations.publish(result.to_foxglove_annotations())
 
         detections: ImageDetections2D = result
         pc = self.pointcloud.get_next()
@@ -111,7 +116,21 @@ class Detection3DModule(Detection2DModule):
         detections3d = self.process_frame(detections, pc, transform)
 
         print("3D DETECTIONS:", detections3d)
-        return detections3d
+        if len(detections3d.detections) > 0:
+            print("GOING TO 3D POSE")
+            self.goto(detections3d[0].pose)
+            return "Going towards 3d detection"
+
+        else:
+            print("NO 3D DETECTIONS, FALLING BACK TO 2D")
+            pose = detections[0].center_to_3d(
+                self.tf,
+                camera_info=self.config.camera_info,
+                assumed_depth=4.0,
+            )
+            print("GOING TO 2D POSE:", pose)
+            self.goto(pose)
+            return "No 3D detections, going towards 2d detection, re-query again to potentially match 3d"
 
     @rpc
     def start(self):

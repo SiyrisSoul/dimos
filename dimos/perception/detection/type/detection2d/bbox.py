@@ -42,7 +42,8 @@ from ultralytics.engine.results import Results
 
 from dimos.msgs.foxglove_msgs import ImageAnnotations
 from dimos.msgs.foxglove_msgs.Color import Color
-from dimos.msgs.sensor_msgs import Image
+from dimos.msgs.geometry_msgs import PoseStamped, Transform, Vector3
+from dimos.msgs.sensor_msgs import CameraInfo, Image
 from dimos.msgs.std_msgs import Header
 from dimos.perception.detection.type.detection2d.base import Detection2D
 from dimos.types.timestamped import to_ros_stamp, to_timestamp
@@ -98,33 +99,6 @@ class Detection2DBBox(Detection2D):
             "conf": f"{self.confidence:.2f}",
             "bbox": f"[{x1:.0f},{y1:.0f},{x2:.0f},{y2:.0f}]",
         }
-
-    def center_to_3d(
-        self,
-        pixel: Tuple[int, int],
-        camera_info: CameraInfo,
-        assumed_depth: float = 1.0,
-    ) -> PoseStamped:
-        """Unproject 2D pixel coordinates to 3D position in camera optical frame.
-
-        Args:
-            camera_info: Camera calibration information
-            assumed_depth: Assumed depth in meters (default 1.0m from camera)
-
-        Returns:
-            Vector3 position in camera optical frame coordinates
-        """
-        # Extract camera intrinsics
-        fx, fy = camera_info.K[0], camera_info.K[4]
-        cx, cy = camera_info.K[2], camera_info.K[5]
-
-        # Unproject pixel to normalized camera coordinates
-        x_norm = (pixel[0] - cx) / fx
-        y_norm = (pixel[1] - cy) / fy
-
-        # Create 3D point at assumed depth in camera optical frame
-        # Camera optical frame: X right, Y down, Z forward
-        return Vector3(x_norm * assumed_depth, y_norm * assumed_depth, assumed_depth)
 
     # return focused image, only on the bbox
     def cropped_image(self, padding: int = 20) -> Image:
@@ -273,6 +247,59 @@ class Detection2DBBox(Detection2D):
 
     def lcm_encode(self):
         return self.to_image_annotations().lcm_encode()
+
+    def center_to_3d(
+        self,
+        tf,
+        camera_info: CameraInfo,
+        assumed_depth: float = 1.0,
+    ) -> Vector3:
+        """Unproject 2D pixel coordinates to 3D position in camera_link frame.
+
+        Args:
+            camera_info: Camera calibration information
+            assumed_depth: Assumed depth in meters (default 1.0m from camera)
+
+        Returns:
+            Vector3 position in camera_link frame coordinates (Z up, X forward)
+        """
+        pixel = self.get_bbox_center()
+        # Extract camera intrinsics
+        fx, fy = camera_info.K[0], camera_info.K[4]
+        cx, cy = camera_info.K[2], camera_info.K[5]
+
+        # Unproject pixel to normalized camera coordinates
+        x_norm = (pixel[0] - cx) / fx
+        y_norm = (pixel[1] - cy) / fy
+
+        # Create 3D point at assumed depth in camera optical frame
+        # Camera optical frame: X right, Y down, Z forward
+        x_optical = x_norm * assumed_depth
+        y_optical = y_norm * assumed_depth
+        z_optical = assumed_depth
+
+        # Transform from camera optical frame to camera_link frame
+        # Optical: X right, Y down, Z forward
+        # Link: X forward, Y left, Z up
+        # Transformation: x_link = z_optical, y_link = -x_optical, z_link = -y_optical
+        vector = Vector3(z_optical, -x_optical, -y_optical)
+
+        pose_in_camera = PoseStamped(
+            ts=self.ts,
+            position=vector,
+            frame_id="camera_link",
+        )
+
+        tf_world_to_camera = tf.get("map", "camera_link", self.ts, 10.0)
+        if not tf_world_to_camera:
+            return
+
+        tf_camera_to_target = Transform.from_pose("target", pose_in_camera)
+        tf_world_to_target = tf_world_to_camera + tf_camera_to_target
+
+        pose_in_world = tf_world_to_target.to_pose(ts=self.ts)
+
+        return pose_in_world
 
     def to_text_annotation(self) -> List[TextAnnotation]:
         x1, y1, x2, y2 = self.bbox

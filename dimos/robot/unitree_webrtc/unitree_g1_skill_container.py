@@ -23,7 +23,7 @@ import datetime
 import time
 from typing import TYPE_CHECKING, Optional, Union
 
-from dimos.core.core import rpc
+from dimos.core import Module, rpc
 from dimos.msgs.geometry_msgs import Twist, TwistStamped, Vector3
 from dimos.protocol.skill.skill import skill
 from dimos.protocol.skill.type import Reducer, Stream
@@ -74,8 +74,9 @@ class UnitreeG1SkillContainer(UnitreeSkillContainer):
         Args:
             robot: The UnitreeG1 or UnitreeGo2 robot instance
         """
-        # Initialize parent class to get all base Unitree skills
-        super().__init__(robot)
+        # TODO: temporary fix, we are not calling init on super since super registeres go2 skills
+        Module.__init__(self)
+        self._robot = robot
 
         # Add G1-specific skills on top
         self._generate_arm_skills()
