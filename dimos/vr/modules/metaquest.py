@@ -3,15 +3,19 @@ import json
 import logging
 import threading
 from pathlib import Path
+from queue import Empty, Queue
 from typing import Optional
 
+import cv2
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
+from reactivex.disposable import Disposable
 
 from dimos.core import Module, Out, rpc
+from dimos.msgs.sensor_msgs import Image
 from ..models import ControllerData, ControllerFrame
 
 logger = logging.getLogger(__name__)
@@ -30,6 +34,8 @@ class MetaQuestModule(Module):
         port: int = 8881,
         ssl_cert: Optional[str] = None,
         ssl_key: Optional[str] = None,
+        camera_streams: Optional[dict] = None,
+        jpeg_quality: int = 85,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -37,16 +43,21 @@ class MetaQuestModule(Module):
         self.port = port
         self.ssl_cert = ssl_cert
         self.ssl_key = ssl_key
-        
+        self.camera_streams = camera_streams or {}
+        self.jpeg_quality = jpeg_quality
+
         self._server = None
         self._running = False
-        
+
         self.stats = {
             "frames_received": 0,
             "errors": 0,
             "last_frame": None
         }
-        
+
+        self._camera_queues = {}
+        self._camera_disposables = {}
+
         self._setup_fastapi()
 
     def _setup_fastapi(self):
@@ -81,8 +92,31 @@ class MetaQuestModule(Module):
                 "status": "ok",
                 "frames_received": self.stats["frames_received"],
                 "errors": self.stats["errors"],
-                "running": self._running
+                "running": self._running,
+                "cameras": list(self.camera_streams.keys())
             }
+
+        @self.app.get("/camera/list")
+        async def list_cameras():
+            """List available camera streams."""
+            return {
+                "cameras": list(self.camera_streams.keys()),
+                "count": len(self.camera_streams)
+            }
+
+        @self.app.get("/camera_feed/{camera_key}")
+        async def camera_feed(camera_key: str):
+            """Stream camera feed as MJPEG."""
+            if camera_key not in self.camera_streams:
+                return HTMLResponse(
+                    content=f"<h1>Camera '{camera_key}' not found</h1>",
+                    status_code=404
+                )
+
+            return StreamingResponse(
+                self._camera_stream_generator(camera_key)(),
+                media_type="multipart/x-mixed-replace; boundary=frame"
+            )
 
         @self.app.websocket("/ws")
         async def websocket_endpoint(websocket: WebSocket):
@@ -262,9 +296,88 @@ class MetaQuestModule(Module):
             logger.error(f"Failed to generate certificate: {e}", exc_info=True)
             return {"error": str(e)}
 
+    def _process_camera_frame(self, image: Image) -> bytes:
+        """Convert Image to JPEG bytes for streaming."""
+        try:
+            # Convert Image to numpy array (RGB format)
+            frame = image.to_numpy()
+
+            # Convert RGB to BGR for OpenCV
+            frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+
+            # Encode as JPEG
+            _, buffer = cv2.imencode(
+                '.jpg',
+                frame_bgr,
+                [cv2.IMWRITE_JPEG_QUALITY, self.jpeg_quality]
+            )
+            return buffer.tobytes()
+        except Exception as e:
+            logger.error(f"Error processing camera frame: {e}")
+            return b''
+
+    def _camera_stream_generator(self, camera_key: str):
+        """Generate MJPEG stream for a camera."""
+        def generate():
+            if camera_key not in self.camera_streams:
+                logger.error(f"Camera '{camera_key}' not found")
+                return
+
+            # Create queue for this camera if not exists
+            if camera_key not in self._camera_queues:
+                self._camera_queues[camera_key] = Queue(maxsize=10)
+
+            frame_queue = self._camera_queues[camera_key]
+
+            # Clear any existing disposable
+            if camera_key in self._camera_disposables:
+                self._camera_disposables[camera_key].dispose()
+
+            # Subscribe to camera observable
+            try:
+                disposable = self.camera_streams[camera_key].subscribe(
+                    on_next=lambda img: (
+                        frame_queue.put(self._process_camera_frame(img))
+                        if img is not None and not frame_queue.full()
+                        else None
+                    ),
+                    on_error=lambda e: logger.error(f"Camera stream error: {e}"),
+                    on_completed=lambda: logger.info(f"Camera stream {camera_key} completed")
+                )
+                self._camera_disposables[camera_key] = disposable
+
+                # Stream frames
+                while True:
+                    try:
+                        frame = frame_queue.get(timeout=1.0)
+                        if frame:
+                            yield (b'--frame\r\n'
+                                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+                    except Empty:
+                        # Continue waiting for frames
+                        continue
+                    except Exception as e:
+                        logger.error(f"Error in stream generator: {e}")
+                        break
+            except Exception as e:
+                logger.error(f"Failed to subscribe to camera stream: {e}")
+            finally:
+                # Cleanup
+                if camera_key in self._camera_disposables:
+                    self._camera_disposables[camera_key].dispose()
+                    del self._camera_disposables[camera_key]
+
+        return generate
+
     def _close_module(self):
         """Cleanup when module is closed."""
         try:
+            # Cleanup camera disposables
+            for disposable in self._camera_disposables.values():
+                disposable.dispose()
+            self._camera_disposables.clear()
+            self._camera_queues.clear()
+
             self.stop()
         except:
             pass

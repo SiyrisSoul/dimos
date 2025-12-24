@@ -13,6 +13,19 @@ let referenceSpace;
 const controllers = [];
 const infoPanels = [];
 
+// Camera video streaming
+const cameraFeeds = [];
+const videoElements = [];
+const videoTextures = [];
+const videoMeshes = [];
+let camerasVisible = true;
+let availableCameras = [];
+let passthroughEnabled = true;
+let cameraBackdrop = null;
+let sessionMode = 'immersive-ar';
+let gridHelper = null;
+const controllerIndicators = [];
+
 const BUTTON_PRESS_THRESHOLD = 0.55;
 const BUTTON_TOUCH_THRESHOLD = 0.05;
 const SEND_INTERVAL_MS = 1000 / 90;
@@ -160,12 +173,23 @@ class WebSocketManager {
 const wsManager = new WebSocketManager(WS_URL, wsStatus);
 
 if ('xr' in navigator) {
-    navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
-        if (!supported) {
+    Promise.all([
+        navigator.xr.isSessionSupported('immersive-ar'),
+        navigator.xr.isSessionSupported('immersive-vr')
+    ]).then(([arSupported, vrSupported]) => {
+        if (arSupported) {
+            console.log('[WebXR] AR passthrough supported');
+            sessionMode = 'immersive-ar';
+        } else if (vrSupported) {
+            console.log('[WebXR] VR mode supported (no passthrough)');
+            sessionMode = 'immersive-vr';
+            passthroughEnabled = false;
+        } else {
             vrButton.disabled = true;
             vrButton.textContent = 'WebXR not supported';
-            showError('WebXR VR is not supported on this device');
+            showError('WebXR is not supported on this device');
         }
+        updatePassthroughUI();
     }).catch((error) => {
         console.error('WebXR capability check failed', error);
         showError('Unable to verify WebXR support');
@@ -185,9 +209,197 @@ function showError(message) {
     errorDiv.style.display = 'block';
 }
 
+async function fetchAvailableCameras() {
+    try {
+        const response = await fetch('/camera/list');
+        const data = await response.json();
+        availableCameras = data.cameras || [];
+        console.log('[cameras] Available cameras:', availableCameras);
+        return availableCameras;
+    } catch (error) {
+        console.error('[cameras] Failed to fetch camera list:', error);
+        return [];
+    }
+}
+
+function setupCameraFeed(cameraKey, index, totalCameras) {
+    console.log(`[cameras] Setting up camera feed: ${cameraKey}`);
+
+    // Create video element
+    const video = document.createElement('video');
+    video.src = `/camera_feed/${cameraKey}`;
+    video.autoplay = true;
+    video.muted = true;
+    video.playsInline = true;
+    video.crossOrigin = 'anonymous';
+
+    // Add video to hidden container
+    const videoContainer = document.getElementById('camera-videos');
+    if (videoContainer) {
+        videoContainer.appendChild(video);
+    }
+
+    // Handle video errors
+    video.onerror = (e) => {
+        console.error(`[cameras] Video error for ${cameraKey}:`, e);
+    };
+
+    // Create video texture
+    const texture = new THREE.VideoTexture(video);
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.format = THREE.RGBFormat;
+
+    // Create display plane
+    const aspect = 4 / 3; // Assume 4:3 aspect ratio (can be adjusted)
+    const planeWidth = 1.2;
+    const planeHeight = planeWidth / aspect;
+
+    const geometry = new THREE.PlaneGeometry(planeWidth, planeHeight);
+    const material = new THREE.MeshBasicMaterial({
+        map: texture,
+        side: THREE.DoubleSide
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+
+    // Position cameras in a horizontal array
+    const spacing = 1.4;
+    const totalWidth = (totalCameras - 1) * spacing;
+    const startX = -totalWidth / 2;
+    const xPos = startX + (index * spacing);
+
+    mesh.position.set(xPos, 1.5, -2.0);
+    scene.add(mesh);
+
+    // Store references
+    videoElements.push(video);
+    videoTextures.push(texture);
+    videoMeshes.push(mesh);
+    cameraFeeds.push(cameraKey);
+
+    console.log(`[cameras] Camera ${cameraKey} positioned at (${xPos.toFixed(2)}, 1.5, -2.0)`);
+}
+
+function createCameraBackdrop(totalCameras) {
+    const width = Math.max(3, totalCameras * 1.4);
+    const backdropGeometry = new THREE.PlaneGeometry(width, 2);
+    const backdropMaterial = new THREE.MeshBasicMaterial({
+        color: 0x000000,
+        transparent: true,
+        opacity: 0.8,
+        side: THREE.DoubleSide
+    });
+    cameraBackdrop = new THREE.Mesh(backdropGeometry, backdropMaterial);
+    cameraBackdrop.position.set(0, 1.5, -2.1);
+    scene.add(cameraBackdrop);
+}
+
+async function initializeCameraFeeds() {
+    const cameras = await fetchAvailableCameras();
+
+    const cameraStatusEl = document.getElementById('camera-status');
+    const cameraControlGroup = document.getElementById('camera-control-group');
+
+    if (cameras.length === 0) {
+        console.log('[cameras] No cameras available');
+        if (cameraStatusEl) {
+            cameraStatusEl.textContent = 'Camera Feeds: None available';
+            cameraStatusEl.style.color = '#888';
+        }
+        if (cameraControlGroup) {
+            cameraControlGroup.style.display = 'none';
+        }
+        return;
+    }
+
+    console.log(`[cameras] Initializing ${cameras.length} camera feed(s)`);
+    cameras.forEach((cameraKey, index) => {
+        setupCameraFeed(cameraKey, index, cameras.length);
+    });
+
+    createCameraBackdrop(cameras.length);
+
+    if (cameraStatusEl) {
+        cameraStatusEl.textContent = `Camera Feeds: ${cameras.length} active`;
+        cameraStatusEl.style.color = '#0f0';
+    }
+
+    if (cameraControlGroup) {
+        cameraControlGroup.style.display = 'block';
+    }
+}
+
+function toggleCameraVisibility() {
+    camerasVisible = !camerasVisible;
+    videoMeshes.forEach(mesh => {
+        mesh.visible = camerasVisible;
+    });
+    if (cameraBackdrop) {
+        cameraBackdrop.visible = camerasVisible;
+    }
+    console.log(`[cameras] Cameras ${camerasVisible ? 'shown' : 'hidden'}`);
+    updateCameraUI();
+}
+
+function updateCameraUI() {
+    const statusBadge = document.getElementById('camera-status-badge');
+    if (statusBadge) {
+        statusBadge.textContent = camerasVisible ? 'ON' : 'OFF';
+        statusBadge.className = `status-badge ${camerasVisible ? 'status-on' : 'status-off'}`;
+    }
+}
+
+async function togglePassthrough() {
+    const currentSession = renderer.xr.getSession();
+
+    passthroughEnabled = !passthroughEnabled;
+    sessionMode = passthroughEnabled ? 'immersive-ar' : 'immersive-vr';
+    scene.background = passthroughEnabled ? null : new THREE.Color(0x000000);
+
+    console.log(`[passthrough] ${passthroughEnabled ? 'ON (AR mode)' : 'OFF (VR mode)'}`);
+    console.log(`[passthrough] Session mode: ${sessionMode}`);
+
+    updatePassthroughUI();
+    updateSceneVisibility();
+
+    if (currentSession) {
+        console.log('[passthrough] Restarting session with new mode...');
+        try {
+            await currentSession.end();
+            await new Promise(resolve => setTimeout(resolve, 200));
+            await enterVR();
+        } catch (err) {
+            console.error('[passthrough] Failed to restart session:', err);
+        }
+    }
+}
+
+function updatePassthroughUI() {
+    const statusBadge = document.getElementById('passthrough-status');
+    if (statusBadge) {
+        const modeText = passthroughEnabled ? 'ON (AR)' : 'OFF (VR)';
+        statusBadge.textContent = modeText;
+        statusBadge.className = `status-badge ${passthroughEnabled ? 'status-on' : 'status-off'}`;
+    }
+}
+
+function updateSceneVisibility() {
+    const isAR = sessionMode === 'immersive-ar';
+
+    if (gridHelper) {
+        gridHelper.visible = !isAR;
+    }
+
+    controllers.forEach(ctrl => {
+        if (ctrl.line) ctrl.line.visible = !isAR;
+        if (ctrl.gripMesh) ctrl.gripMesh.visible = !isAR;
+        if (ctrl.indicator) ctrl.indicator.visible = isAR;
+    });
+}
+
 function init() {
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x000000);
+    scene.background = null; // Enable passthrough
 
     camera = new THREE.PerspectiveCamera(
         75,
@@ -197,7 +409,7 @@ function init() {
     );
     camera.position.set(0, 1.6, 3);
 
-    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.xr.enabled = true;
@@ -210,12 +422,16 @@ function init() {
     directionalLight.position.set(5, 10, 5);
     scene.add(directionalLight);
 
-    const gridHelper = new THREE.GridHelper(10, 10, 0x00ff00, 0x003300);
+    gridHelper = new THREE.GridHelper(10, 10, 0x00ff00, 0x003300);
     gridHelper.position.y = 0;
     scene.add(gridHelper);
 
     setupControllers();
     createInfoPanels();
+    updateSceneVisibility();
+
+    // Initialize camera feeds
+    initializeCameraFeeds();
 
     window.addEventListener('resize', onWindowResize);
 
@@ -227,10 +443,21 @@ const controllerState = [
     { connected: false, hand: null }
 ];
 
+// Track previous button states for edge detection
+const previousButtonStates = [
+    { y_or_b: false, x_or_a: false },
+    { y_or_b: false, x_or_a: false }
+];
+
 function createInfoPanels() {
     const positions = [
-        new THREE.Vector3(-1, 1.6, -1.5),
-        new THREE.Vector3(1, 1.6, -1.5)
+        new THREE.Vector3(-0.5, 1.6, -1.2),
+        new THREE.Vector3(0.5, 1.6, -1.2)
+    ];
+
+    const rotations = [
+        Math.PI / 12,
+        -Math.PI / 12
     ];
 
     const colors = [0xff0066, 0x0066ff];
@@ -246,12 +473,14 @@ function createInfoPanels() {
         const material = new THREE.MeshBasicMaterial({
             map: texture,
             transparent: true,
+            opacity: 0.99,
             side: THREE.DoubleSide
         });
 
-        const geometry = new THREE.PlaneGeometry(0.8, 0.8);
+        const geometry = new THREE.PlaneGeometry(0.5, 0.5);
         const mesh = new THREE.Mesh(geometry, material);
         mesh.position.copy(positions[i]);
+        mesh.rotation.y = rotations[i];
 
         scene.add(mesh);
 
@@ -271,15 +500,16 @@ function updateInfoPanel(index, state) {
     }
 
     const ctx = panel.canvas.getContext('2d');
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
+    ctx.clearRect(0, 0, panel.canvas.width, panel.canvas.height);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
     ctx.fillRect(0, 0, panel.canvas.width, panel.canvas.height);
 
     ctx.fillStyle = '#00ff00';
-    ctx.font = 'bold 20px Courier New';
+    ctx.font = 'bold 18px Courier New';
     ctx.textAlign = 'left';
 
-    let y = 30;
-    const lineHeight = 22;
+    let y = 28;
+    const lineHeight = 19;
 
     const handedness = index === 0 ? 'LEFT' : 'RIGHT';
     ctx.fillStyle = `#${panel.color.toString(16).padStart(6, '0')}`;
@@ -374,9 +604,22 @@ function setupControllers() {
         controllerGrip.add(gripMesh);
         scene.add(controllerGrip);
 
+        const indicatorGeometry = new THREE.SphereGeometry(0.015, 16, 16);
+        const indicatorMaterial = new THREE.MeshBasicMaterial({
+            color: i === 0 ? 0xff0066 : 0x0066ff,
+            transparent: true,
+            opacity: 0.9
+        });
+        const indicator = new THREE.Mesh(indicatorGeometry, indicatorMaterial);
+        controllerGrip.add(indicator);
+        controllerIndicators.push(indicator);
+
         controllers.push({
             controller,
-            grip: controllerGrip
+            grip: controllerGrip,
+            line,
+            gripMesh,
+            indicator
         });
     }
 }
@@ -557,9 +800,37 @@ function streamToServer(controllerStates, timestampMs) {
     }
 }
 
+function checkCameraToggle(controllerStates) {
+    if (!controllerStates) return;
+
+    controllerStates.forEach((state, index) => {
+        if (!state || !state.connected) return;
+
+        // Y/B button (index 5) - camera toggle
+        const yPressed = state.buttonValues[5] > BUTTON_PRESS_THRESHOLD;
+        const prevYPressed = previousButtonStates[index].y_or_b;
+        if (yPressed && !prevYPressed) {
+            toggleCameraVisibility();
+        }
+
+        // X/A button (index 4) - passthrough toggle
+        const xPressed = state.buttonValues[4] > BUTTON_PRESS_THRESHOLD;
+        const prevXPressed = previousButtonStates[index].x_or_a;
+        if (xPressed && !prevXPressed) {
+            togglePassthrough();
+        }
+
+        previousButtonStates[index].y_or_b = yPressed;
+        previousButtonStates[index].x_or_a = xPressed;
+    });
+}
+
 function animate(_time, frame) {
     const controllerStates = getControllerData(frame);
     if (controllerStates) {
+        // Check for camera toggle button press
+        checkCameraToggle(controllerStates);
+
         controllerStates.forEach((state, index) => {
             updateInfoPanel(index, state);
         });
@@ -592,8 +863,11 @@ async function enterVR() {
             optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking']
         };
 
-        const session = await navigator.xr.requestSession('immersive-vr', sessionInit);
-        console.log('XR Session created');
+        console.log(`[WebXR] Requesting session mode: ${sessionMode}`);
+        const session = await navigator.xr.requestSession(sessionMode, sessionInit);
+        console.log('[WebXR] Session created');
+        console.log('[WebXR] Environment blend mode:', session.environmentBlendMode);
+        console.log('[WebXR] Mode:', sessionMode === 'immersive-ar' ? 'AR (Passthrough)' : 'VR (No Passthrough)');
 
         session.addEventListener('inputsourceschange', () => {
             console.log('inputsourceschange:', session.inputSources.length);
@@ -616,6 +890,26 @@ async function enterVR() {
     }
 }
 
+function setupUIControls() {
+    const passthroughBtn = document.getElementById('passthrough-toggle-btn');
+    const cameraBtn = document.getElementById('camera-toggle-btn');
+
+    if (passthroughBtn) {
+        passthroughBtn.addEventListener('click', () => {
+            togglePassthrough();
+        });
+    }
+
+    if (cameraBtn) {
+        cameraBtn.addEventListener('click', () => {
+            toggleCameraVisibility();
+        });
+    }
+
+    updatePassthroughUI();
+}
+
 vrButton.addEventListener('click', enterVR);
 
 init();
+setupUIControls();

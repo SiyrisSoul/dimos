@@ -47,6 +47,59 @@ quest.controller_right.observable().subscribe(lambda data: handle_right_controll
 quest.controller_both.observable().subscribe(lambda frame: handle_both_controllers(frame))
 ```
 
+### With Camera Streaming
+```python
+import dimos.core as core
+from dimos.vr.modules import MetaQuestModule
+from dimos.hardware.camera import CameraModule, Webcam
+
+dimos = core.start(1)
+
+# Setup camera
+camera = dimos.deploy(CameraModule, hardware=Webcam)
+camera.start()
+
+# Deploy VR with camera feeds
+quest = dimos.deploy(
+    MetaQuestModule,
+    port=8881,
+    camera_streams={
+        'front_camera': camera.image.observable()
+    }
+)
+quest.generate_certificate()
+quest.start()
+
+# Subscribe to controller streams as usual
+quest.controller_both.observable().subscribe(lambda frame: handle_controllers(frame))
+```
+
+### With Stereo Camera (ZED)
+```python
+import dimos.core as core
+from dimos.vr.modules import MetaQuestModule
+from dimos.hardware.camera.zed import ZEDModule
+
+dimos = core.start(1)
+
+# Setup ZED camera
+zed = dimos.deploy(ZEDModule, camera_id=0)
+zed.start()
+
+# Deploy VR with stereo camera feeds
+quest = dimos.deploy(
+    MetaQuestModule,
+    port=8881,
+    camera_streams={
+        'left_camera': zed.color_image.observable(),
+        # Can add depth stream as well
+        'depth': zed.depth_image.observable()
+    }
+)
+quest.generate_certificate()
+quest.start()
+```
+
 ## Reference Output
 
 The server logs complete controller data at 90Hz. Example output:
@@ -232,8 +285,92 @@ def handle_menu(frame: ControllerFrame):
 ## Output Streams
 
 - `quest.controller_left` → `ControllerData` for left hand
-- `quest.controller_right` → `ControllerData` for right hand  
+- `quest.controller_right` → `ControllerData` for right hand
 - `quest.controller_both` → `ControllerFrame` with both controllers
+
+## Camera Streaming
+
+The VR module supports streaming camera feeds to the Quest 3 headset for display in VR.
+
+### Features
+
+- **Multi-camera support**: Stream multiple cameras simultaneously
+- **Monocular & stereo**: Works with Webcam and ZED cameras
+- **Low latency**: MJPEG streaming over HTTPS
+- **VR display**: Cameras appear as 3D video planes in VR space
+- **Interactive control**: Toggle camera visibility with Y/B controller button
+
+### Camera Feed Setup
+
+Pass camera observables to `MetaQuestModule` via the `camera_streams` parameter:
+
+```python
+quest = dimos.deploy(
+    MetaQuestModule,
+    port=8881,
+    camera_streams={
+        'camera_name': camera.image.observable(),
+        'another_camera': camera2.image.observable()
+    },
+    jpeg_quality=85  # Optional: adjust JPEG compression (1-100)
+)
+```
+
+### VR Display
+
+- Cameras appear as video planes in VR at eye level
+- Multiple cameras are arranged horizontally
+- Default position: 2.0m in front, 1.5m height
+- Semi-transparent black backdrop for contrast
+
+**Controls:**
+- **On-screen buttons**: "VR Controls" panel (visible in browser)
+- **Y/B button**: Toggle camera visibility (in VR)
+- **X/A button**: Toggle passthrough mode (in VR)
+
+### API Endpoints
+
+- `GET /camera/list` - List available camera streams
+- `GET /camera_feed/{camera_key}` - MJPEG stream for specific camera
+- `GET /health` - Server health check (includes camera list)
+
+### Performance Tuning
+
+```python
+quest = dimos.deploy(
+    MetaQuestModule,
+    camera_streams=cameras,
+    jpeg_quality=75  # Lower = smaller files, faster, lower quality
+)
+```
+
+Recommended quality settings:
+- **85** (default): High quality, balanced
+- **75**: Good quality, better performance
+- **60**: Lower quality, maximum performance
+
+### Passthrough Mode
+
+Quest 3 passthrough is enabled by default using WebXR AR mode:
+
+- **Default mode**: `immersive-ar` - Passthrough ON, see real environment with virtual overlays
+- **VR mode**: `immersive-vr` - Passthrough OFF, black background with virtual scene only
+- **Implementation**: Uses `navigator.xr.requestSession('immersive-ar')` for passthrough
+- **On-screen controls**: Use "VR Controls" panel on the right side of screen
+- **Toggle methods**:
+  - Click "Toggle AR/VR Mode" button on screen (restarts session with new mode)
+  - Press X/A button on controller (in VR - restarts session)
+
+### On-Screen Controls
+
+A control panel is available on the right side of the screen:
+
+- **Passthrough Toggle**: Switch between MR and VR modes
+- **Camera Toggle**: Show/hide camera feeds (when available)
+- **Status Indicators**: Green = ON, Gray = OFF
+- **Controller Hints**: Shows VR button mappings
+
+All controls work both before entering VR and during VR session.
 
 ## Files
 

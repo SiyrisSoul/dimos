@@ -68,6 +68,10 @@ class VRServer:
         async def health():
             return self.stats
 
+        @self.app.get("/camera/list")
+        async def list_cameras():
+            return {"cameras": [], "count": 0}
+
         @self.app.websocket("/ws")
         async def websocket_endpoint(websocket: WebSocket):
             await websocket.accept()

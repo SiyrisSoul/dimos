@@ -111,6 +111,89 @@
             max-width: 400px;
             display: none;
         }
+
+        #vr-controls {
+            position: fixed;
+            top: 160px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid #0a0;
+            border-radius: 8px;
+            padding: 16px;
+            z-index: 100;
+            min-width: 250px;
+        }
+
+        #vr-controls h3 {
+            color: #0f0;
+            margin: 0 0 12px 0;
+            font-size: 16px;
+        }
+
+        .control-group {
+            margin-bottom: 12px;
+        }
+
+        .control-label {
+            color: #0a0;
+            font-size: 12px;
+            margin-bottom: 4px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+            margin-left: 8px;
+        }
+
+        .status-on {
+            background: #0a0;
+            color: #000;
+        }
+
+        .status-off {
+            background: #333;
+            color: #888;
+        }
+
+        .toggle-btn {
+            width: 100%;
+            padding: 8px 12px;
+            margin-top: 4px;
+            background: #0a0;
+            border: 1px solid #0f0;
+            border-radius: 4px;
+            color: #000;
+            font-weight: bold;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            transition: all 0.2s;
+        }
+
+        .toggle-btn:hover {
+            background: #0f0;
+            transform: translateY(-1px);
+        }
+
+        .toggle-btn:active {
+            transform: translateY(0);
+        }
+
+        .toggle-btn:disabled {
+            background: #333;
+            border-color: #555;
+            color: #666;
+            cursor: not-allowed;
+        }
+
+        .hint-text {
+            font-size: 10px;
+            color: #666;
+            margin-top: 4px;
+        }
     </style>
 </head>
 <body>
@@ -121,6 +204,42 @@
     <div id="ui-overlay">
         <h1>VR Teleoperation</h1>
         <p>Quest 3 controller streaming with WebSocket</p>
+        <p id="camera-status" style="margin-top: 8px; color: #0a0; font-size: 12px;">Camera Feeds: Loading...</p>
+    </div>
+
+    <!-- Hidden container for camera video elements -->
+    <div id="camera-videos" style="display: none;"></div>
+
+    <!-- VR Controls Panel -->
+    <div id="vr-controls">
+        <h3>VR Controls</h3>
+
+        <div class="control-group">
+            <div class="control-label">
+                Passthrough Mode
+                <span id="passthrough-status" class="status-badge status-on">ON (AR)</span>
+            </div>
+            <button id="passthrough-toggle-btn" class="toggle-btn">Toggle AR/VR Mode</button>
+            <div class="hint-text">AR=passthrough, VR=black scene | X/A in VR</div>
+        </div>
+
+        <div class="control-group" id="camera-control-group" style="display: none;">
+            <div class="control-label">
+                Camera Feeds
+                <span id="camera-status-badge" class="status-badge status-on">ON</span>
+            </div>
+            <button id="camera-toggle-btn" class="toggle-btn">Toggle Cameras</button>
+            <div class="hint-text">Also: Press Y/B in VR</div>
+        </div>
+
+        <div class="control-group">
+            <div class="hint-text" style="margin-top: 12px; border-top: 1px solid #333; padding-top: 8px;">
+                <strong style="color: #0a0;">Controller Buttons:</strong><br>
+                • X/A = Passthrough toggle<br>
+                • Y/B = Camera toggle<br>
+                • Trigger/Grip = Custom actions
+            </div>
+        </div>
     </div>
 
     <div id="vr-button-container">
@@ -128,10 +247,11 @@
         <div id="error"></div>
         <div id="info">
             <p><strong>Instructions:</strong></p>
-            <p style="margin-top: 8px;">1. Press "Enter VR" button</p>
-            <p>2. Put on your Quest 3</p>
-            <p>3. See controller data on panels</p>
-            <p style="margin-top: 8px; font-size: 12px; color: #666;">WebSocket streams data when available</p>
+            <p style="margin-top: 8px;">1. Use "VR Controls" panel to toggle settings</p>
+            <p>2. Press "Enter VR" button</p>
+            <p>3. Put on your Quest 3</p>
+            <p>4. See your room (AR mode) or black scene (VR mode)</p>
+            <p style="margin-top: 8px; font-size: 12px; color: #666;">AR passthrough enabled by default on Quest 3</p>
         </div>
     </div>
 
