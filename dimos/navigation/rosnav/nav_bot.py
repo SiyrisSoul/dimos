@@ -119,7 +119,8 @@ class ROSNavigationModule(ROSNav):
     @rpc
     def start(self):
         if self._running:
-            raise Exception("Cant run")
+            print("TRIED TO RUN START TWICE")
+            return
 
         self._running = True
         self.spin_thread = threading.Thread(target=self._spin_node, daemon=True)
