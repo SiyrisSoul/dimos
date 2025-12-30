@@ -122,8 +122,9 @@ RUN /bin/bash -c "source /opt/dimos-venv/bin/activate && \
 
 # Copy helper scripts
 COPY docker/navigation/run_both.sh /usr/local/bin/run_both.sh
+COPY docker/navigation/run_both_simulation.sh /usr/local/bin/run_both_simulation.sh
 COPY docker/navigation/ros_launch_wrapper.py /usr/local/bin/ros_launch_wrapper.py
-RUN chmod +x /usr/local/bin/run_both.sh /usr/local/bin/ros_launch_wrapper.py
+RUN chmod +x /usr/local/bin/run_both.sh /usr/local/bin/ros_launch_wrapper.py /usr/local/bin/run_both_simulation.sh
 
 # Set up udev rules for USB devices (motor controller)
 RUN echo 'SUBSYSTEM=="tty", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="5740", MODE="0666", GROUP="dialout"' > /etc/udev/rules.d/99-motor-controller.rules && \

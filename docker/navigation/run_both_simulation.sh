@@ -115,9 +115,9 @@ else
         echo "WARNING: Virtual environment not found at /opt/dimos-venv, using system Python"
     fi
 
-    echo "Starting dimos run unitree-g1..."
+    echo "Starting demo_ros_navigation.py..."
     # Capture any startup errors
-    dimos run unitree-g1 2>&1 &
+    python /workspace/dimos/dimos/navigation/demo_ros_navigation.py 2>&1 &
     DIMOS_PID=$!
 
     # Give it a moment to start and check if it's still running
