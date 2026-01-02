@@ -1,13 +1,11 @@
 # Agent
 
-## What is an Agent?
+## Motivation
 
-An Agent is your robot's **brain** - an LLM-based reasoning system that turns natural language commands into robot actions. Give it "go to the kitchen" and it figures out which skills to call and when. It bridges what you want with how to execute it.
+Traditional robot programming requires manually coding every behavior. By contrast, LLM-powered agents (in conjunction with [skills](./skills.md)) allow you to instruct robots at a higher level of abstraction, in natural language. Tell it to "go to the kitchen" and it figures out which skills to call and when.
 
-<!-- Evidence: dimos/agents2/agent.py:163-213 - Agent class with LLM integration, SkillCoordinator, message history -->
-<!-- Evidence: dimos/agents2/spec.py:147 - AgentSpec inherits from Module -->
-
-This is **neurosymbolic orchestration**: the LLM handles high-level reasoning (what to do) while skills handle execution (how). The LLM never controls motors or sensors - only decides which skills to call.
+> [!TIP]
+> New to agents? Start with the [Equip an agent with skills](../tutorials/skill_with_agent/tutorial.md) tutorial for a hands-on introduction.
 
 ```python
 from dimos.agents2.agent import llm_agent
@@ -28,13 +26,6 @@ blueprint = autoconnect(
 ```
 
 <!-- Evidence: dimos/robot/unitree_webrtc/unitree_go2_blueprints.py:110-116 - Real "agentic" blueprint showing this pattern -->
-
-## Purpose
-
-Traditional robot programming requires manually coding every behavior. By contrast, agents (and [skills](./skills.md)) allow you to instruct robots at a higher level of abstraction. "Clean the kitchen" becomes: explore → identify objects → navigate to each → manipulate → verify.
-
-> [!TIP]
-> New to agents? Start with the [Equip an agent with skills](../tutorials/skill_with_agent/tutorial.md) tutorial for a hands-on introduction.
 
 ## Situating Agents vis-a-vis other DimOS concepts
 
@@ -109,94 +100,20 @@ The agent runs an event-driven reasoning loop:
 2. **Execute tool calls** - Dispatch requested skills to coordinator
 3. **Wait for updates** - Suspend until skills produce results
 4. **Process results** - Transform skill outputs into messages
-5. **Repeat** - Continue until no active skills remain
+5. **Repeat** - Continue until the skills that were initialized with `Return.call_agent` or `Stream.call_agent` -- what we might call *active* skills for short -- have completed.
 
-The loop exits when all active skills complete (those with `Return.call_agent` or `Stream.call_agent`).
-
-<!-- Evidence: dimos/agents2/agent.py:482-600 - agent_loop() implementation -->
+<!-- Evidence: dimos/agents2/agent.py - agent_loop() implementation -->
 
 The loop handles *long-running operations* without blocking. Navigation takes 30 seconds? The agent waits, then resumes reasoning with results.
 
 <!-- Evidence: dimos/agents2/agent.py:304 - await coordinator.wait_for_updates() enables async waiting -->
 
-Skills can *stream updates* back. A skill exploring an environment might yield periodic updates ("Found 3 objects so far...") keeping the agent informed.
-
-<!-- Evidence: dimos/protocol/skill/skill.py:37-42 - Return enum documentation for passive vs call_agent -->
-<!-- Evidence: dimos/protocol/skill/skill.py:44-49 - Stream enum for streaming results -->
-
 ## How agents receive information
 
 > [!IMPORTANT]
-> The data flow is: **Stream → Skill → Agent**. Skills are the intended data bridge: they subscribe to streams, process data, and expose it to agents through callable methods.
+> If you want to get information to an agent, you need to do that with skills.
 
-<!-- Evidence: dimos/agents2/agent.py:163-213 - Agent class has no In[] subscriptions -->
-<!-- Evidence: dimos/protocol/skill/skill.py:65-113 - Skills can use In[T] to subscribe to streams -->
-
-### Two ways to use skills to get information from streams to agents
-
-> [!NOTE]
-> Pattern A wakes the agent when called. Pattern B yields continuously but never wakes the agent—data from the passive skill is delivered only when there are updates from the active skill(s).
-
-#### Pattern A: Agent explicitly calls when needed
-
-```python
-from dimos.core import In, Module
-from dimos.protocol.skill.skill import skill
-
-class CameraSkills(Module):
-    camera_feed: In["CameraImage"]
-
-    def __init__(self):
-        self.latest_frame = None
-
-    def on_camera_feed(self, image):
-        self.latest_frame = image  # Cache for skill access
-
-    @skill()  # By default, wakes agent with result
-    def get_current_frame(self) -> str:
-        """Agent calls this skill to get current camera data."""
-        if self.latest_frame is None:
-            return "No frame available"
-        return f"Frame: {self.latest_frame.timestamp}"
-```
-
-<!-- Evidence: dimos/protocol/skill/type.py:128-138 - Return.call_agent is default -->
-
-#### Pattern B: Passive streaming
-
-```python
-from collections.abc import Generator
-import time
-
-from dimos.core import Module
-from dimos.protocol.skill.skill import skill
-from dimos.protocol.skill.type import Reducer, Stream
-
-class HeartbeatMonitor(Module):
-    @skill(stream=Stream.passive, reducer=Reducer.latest)
-    def track_uptime(self) -> Generator[str, None, None]:
-        """Streams uptime; agent sees latest when woken by other skills."""
-        start = time.time()
-        while True:
-            elapsed = time.time() - start
-            yield f"Uptime: {elapsed:.1f}s"
-            time.sleep(1.0)
-```
-
-<!-- Evidence: dimos/protocol/skill/type.py:47-78 - Stream.passive requires generator -->
-<!-- Evidence: dimos/protocol/skill/type.py:323-328 - Reducer.latest keeps most recent value -->
-
-> [!CAUTION]
-> Passive skills alone cannot keep the agent loop alive. When only passive skills remain, the loop exits.
-
-**Two input paths to agents:**
-
-1. **Synchronous queries** - Direct commands: `agent.query("go to the kitchen")`
-   <!-- Evidence: dimos/agents2/agent.py:247-325 - agent_loop(first_query) parameter -->
-
-2. **Asynchronous skill triggers** - `Stream.call_agent` skills act as the loop "heartbeat." When only passive skills remain, the loop exits.
-   <!-- Evidence: dimos/agents2/cli/human.py - HumanInput skill uses Stream.call_agent -->
-   <!-- Evidence: dimos/agents2/agent.py:295-298 - has_active_skills() check before wait_for_updates -->
+There are two broad ways to get information to an agent. You can either (i) give it skills that it can use to get information -- think of a coding agent and its search tool(s) -- or (ii) stream updates from skills. For more details, see [the Skills concept guide](./skills.md).
 
 ## State management
 
@@ -222,21 +139,20 @@ This one-way pattern supports explicit state management - each agent instance re
 
 * **Guided tours and explanations** - Agent navigates to key locations, describes what's at each, answers questions about equipment and procedures.
 
-## Best practices
+## See also
 
-* **Use `Return.call_agent` for most skills** - Provides immediate feedback. Use `Return.passive` only when the agent doesn't need completion notification.
+### Hands-on tutorials
 
-* **Use skills to bridge streams**
+* [Equip an agent with skills](../tutorials/skill_with_agent/tutorial.md)
 
-<!-- Evidence: dimos/agents2/agent.py:163-213 - Agent class doesn't use In[] subscriptions -->
-<!-- Evidence: dimos/protocol/skill/skill.py:37-49 - Stream and Return enums for skill configuration -->
+* [Build a multi-agent RobotButler](../tutorials/multi_agent/tutorial.md)
 
-## Related concepts
+### Related concepts
 
 * [Skills](./skills.md) - Methods that agents can discover and invoke
 * [Blueprints](./blueprints.md) - Composing agents, skills, and hardware into systems
 * [Modules](./modules.md) - The foundational abstraction that agents build upon
 
-## API reference
+### API reference
 
-* [Agents API](../api/agents.md) - API reference for agent classes, functions, and configuration
+* [Agents API](../api/agents.md) - API reference for agent classes, message types, and configuration
