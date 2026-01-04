@@ -14,6 +14,7 @@
 
 import threading
 import time
+from queue import Queue
 
 from cv_bridge import CvBridge
 import message_filters
@@ -51,6 +52,8 @@ class ObjectSceneRegistrationModule(Module):
     _node: Node | None = None
     _bridge: CvBridge | None = None
     _spin_thread: threading.Thread | None = None
+    _processing_thread: threading.Thread | None = None
+    _processing_queue: Queue | None = None
     _running: bool = False
     _camera_info: CameraInfo | None = None
 
@@ -165,15 +168,38 @@ class ObjectSceneRegistrationModule(Module):
         )
         self._spin_thread.start()
 
+        # Start processing thread (keeps callback fast, processes in background)
+        self._processing_queue = Queue(maxsize=1)
+        self._processing_thread = threading.Thread(
+            target=self._processing_loop,
+            daemon=True,
+            name="ObjectSceneRegistrationProcessingThread",
+        )
+        self._processing_thread.start()
+
     def _spin_node(self) -> None:
         """Spin the ROS node."""
         while self._running and rclpy.ok():
             rclpy.spin_once(self._node, timeout_sec=0.1)
 
+    def _processing_loop(self) -> None:
+        """Background thread for heavy image processing."""
+        while self._running:
+            try:
+                # Block until data is available (with timeout to check _running)
+                color_msg, depth_msg = self._processing_queue.get(timeout=0.5)
+                self._process_images(color_msg, depth_msg)
+            except Exception:
+                # Queue.get timeout - just continue to check _running
+                continue
+
     @rpc
     def stop(self) -> None:
         """Stop the module and clean up resources."""
         self._running = False
+
+        if self._processing_thread and self._processing_thread.is_alive():
+            self._processing_thread.join(timeout=1.0)
 
         if self._spin_thread and self._spin_thread.is_alive():
             self._spin_thread.join(timeout=1.0)
@@ -234,7 +260,23 @@ class ObjectSceneRegistrationModule(Module):
     def _on_synced_images(
         self, color_msg: ROSCompressedImage, depth_msg: ROSCompressedImage
     ) -> None:
-        """Process synchronized color and depth images."""
+        """Queue synchronized images for processing (fast callback)."""
+        if not self._processing_queue:
+            return
+
+        # Drop old data if queue is full (we always want the latest)
+        if self._processing_queue.full():
+            try:
+                self._processing_queue.get_nowait()
+            except Exception:
+                pass
+
+        self._processing_queue.put((color_msg, depth_msg))
+
+    def _process_images(
+        self, color_msg: ROSCompressedImage, depth_msg: ROSCompressedImage
+    ) -> None:
+        """Process synchronized color and depth images (runs in background thread)."""
         if not self._detector or not self._bridge or not self._camera_info:
             return
 
@@ -251,10 +293,6 @@ class ObjectSceneRegistrationModule(Module):
         # Run 2D detection
         detections_2d: ImageDetections2D = self._detector.process_image(color_image)
 
-        if not detections_2d:
-            return
-
-        # Publish 2D detections
         ros_detections_2d = detections_2d.to_ros_detection2d_array()
         self._detections_2d_pub.publish(ros_detections_2d)
 
@@ -265,10 +303,7 @@ class ObjectSceneRegistrationModule(Module):
         self._overlay_pub.publish(overlay_msg)
 
         # Process 3D detections
-        start_time = time.time()
         self._process_3d_detections(detections_2d, color_image, depth_image, color_msg.header)
-        total_time = time.time() - start_time
-        logger.info(f"3D detection time: {total_time} seconds")
 
     def _process_3d_detections(
         self,

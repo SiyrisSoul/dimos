@@ -67,9 +67,9 @@ class Yoloe2DDetector(Detector):
         if model_name is None:
             if prompt_mode == YoloePromptMode.LRPC:
                 # LRPC requires prompt-free model with built-in embeddings
-                model_name = "yoloe-11l-seg-pf.pt"
+                model_name = "yoloe-11s-seg-pf.pt"
             else:
-                model_name = "yoloe-11l-seg.pt"
+                model_name = "yoloe-11s-seg.pt"
 
         # Load model from LFS-managed data directory
         self.model = YOLOE(get_data(model_path) / model_name)
