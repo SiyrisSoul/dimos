@@ -11,17 +11,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from dimos_lcm.vision_msgs.Detection2D import Detection2D as LCMDetection2D
 
-from dimos.perception.detection.type.detection2d.base import Detection2D, Filter2D
-from dimos.perception.detection.type.detection2d.bbox import Detection2DBBox
-from dimos.perception.detection.type.detection2d.imageDetections2D import ImageDetections2D
-from dimos.perception.detection.type.detection2d.person import Detection2DPerson
-from dimos.perception.detection.type.detection2d.seg import Detection2DSeg
+from dimos.types.timestamped import to_timestamp
 
-__all__ = [
-    "Detection2D",
-    "Detection2DBBox",
-    "Detection2DPerson",
-    "Detection2DSeg",
-    "ImageDetections2D",
-]
+
+class Detection2D(LCMDetection2D):
+    msg_name = "vision_msgs.Detection2D"
+
+    # for _get_field_type() to work when decoding in _decode_one()
+    __annotations__ = LCMDetection2D.__annotations__
+
+    @property
+    def ts(self) -> float:
+        return to_timestamp(self.header.stamp)
+

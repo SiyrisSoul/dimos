@@ -19,6 +19,10 @@ import functools
 from typing import Any
 
 from dimos.msgs.geometry_msgs import PoseStamped, Transform, Vector3
+from dimos.msgs.std_msgs import Header
+from dimos.msgs.vision_msgs import Detection3D
+from dimos_lcm.vision_msgs import ObjectHypothesis, ObjectHypothesisWithPose
+from dimos.msgs.geometry_msgs import Pose, Quaternion
 from dimos.perception.detection.type.detection2d import Detection2DBBox
 
 
@@ -47,6 +51,31 @@ class Detection3DBBox(Detection2DBBox):
             position=self.center,
             orientation=self.orientation,
         )
+
+    def to_ros_detection3d(self) -> Detection3D:
+        """Convert to ROS Detection3D message."""
+        msg = Detection3D()
+        msg.header = Header(self.ts, self.frame_id)
+
+        # Results
+        msg.results = [
+            ObjectHypothesisWithPose(
+                hypothesis=ObjectHypothesis(
+                    class_id=str(self.class_id),
+                    score=self.confidence,
+                )
+            )
+        ]
+
+        # Bounding Box
+        msg.bbox.center = Pose(
+            position=self.center,
+            orientation=Quaternion(*self.orientation),
+        )
+        msg.bbox.size = self.size
+
+        return msg
+
 
     def to_repr_dict(self) -> dict[str, Any]:
         # Calculate distance from camera

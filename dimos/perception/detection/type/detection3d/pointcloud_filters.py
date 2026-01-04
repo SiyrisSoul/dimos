@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from dimos_lcm.sensor_msgs import CameraInfo  # type: ignore[import-untyped]
+from dimos_lcm.sensor_msgs import CameraInfo
 
 from dimos.msgs.geometry_msgs import Transform
 from dimos.msgs.sensor_msgs import PointCloud2
@@ -36,14 +36,10 @@ def statistical(nb_neighbors: int = 40, std_ratio: float = 0.5) -> PointCloudFil
     def filter_func(
         det: Detection2DBBox, pc: PointCloud2, ci: CameraInfo, tf: Transform
     ) -> PointCloud2 | None:
-        try:
-            statistical, _removed = pc.pointcloud.remove_statistical_outlier(
-                nb_neighbors=nb_neighbors, std_ratio=std_ratio
-            )
-            return PointCloud2(statistical, pc.frame_id, pc.ts)
-        except Exception:
-            # print("statistical filter failed:", e)
-            return None
+        statistical, _removed = pc.pointcloud.remove_statistical_outlier(
+            nb_neighbors=nb_neighbors, std_ratio=std_ratio
+        )
+        return PointCloud2(statistical, pc.frame_id, pc.ts)
 
     return filter_func
 
@@ -52,15 +48,11 @@ def raycast() -> PointCloudFilter:
     def filter_func(
         det: Detection2DBBox, pc: PointCloud2, ci: CameraInfo, tf: Transform
     ) -> PointCloud2 | None:
-        try:
-            camera_pos = tf.inverse().translation
-            camera_pos_np = camera_pos.to_numpy()
-            _, visible_indices = pc.pointcloud.hidden_point_removal(camera_pos_np, radius=100.0)
-            visible_pcd = pc.pointcloud.select_by_index(visible_indices)
-            return PointCloud2(visible_pcd, pc.frame_id, pc.ts)
-        except Exception:
-            # print("raycast filter failed:", e)
-            return None
+        camera_pos = tf.inverse().translation
+        camera_pos_np = camera_pos.to_numpy()
+        _, visible_indices = pc.pointcloud.hidden_point_removal(camera_pos_np, radius=100.0)
+        visible_pcd = pc.pointcloud.select_by_index(visible_indices)
+        return PointCloud2(visible_pcd, pc.frame_id, pc.ts)
 
     return filter_func
 
