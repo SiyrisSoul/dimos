@@ -68,12 +68,12 @@ class XArmSDKWrapper(BaseManipulatorSDK):
                 self.native_sdk = XArmAPI(ip, is_radian=False)
 
             elif connection_type == "sim":
-                from dimos.hardware.manipulators.xarm.sim_driver_bridge import SimDriverBridge
+                from dimos.hardware.manipulators.xarm.xarm_sim_bridge import XArmSimBridge
 
                 self.dof = config.get("dof", 7)
                 control_rate = config.get("control_rate", 100)
                 self.logger.info(f"Connecting to XArm Sim (DOF: {self.dof})...")
-                self.native_sdk = SimDriverBridge(
+                self.native_sdk = XArmSimBridge(
                     is_radian=False,
                     check_joint_limit=True,
                     num_joints=self.dof,
@@ -81,7 +81,7 @@ class XArmSDKWrapper(BaseManipulatorSDK):
                     joint_state_rate=float(control_rate),
                     control_frequency=float(control_rate),
                 )
-                # SimDriverBridge needs explicit connect() call (unlike hardware XArmAPI)
+                # XArmSimBridge needs explicit connect() call (unlike hardware XArmAPI)
                 self.native_sdk.connect()
 
             # Check connection
