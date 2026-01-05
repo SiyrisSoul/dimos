@@ -130,16 +130,11 @@ def log_stream_process(name: str, path_str: str) -> None:
                 print(f"[Dask Logging {name}] error: {error}")
 
 
-def process2(*args):
-    print("""process2 started""")
-    return
-
-
 def main() -> None:
     # At least 3 workers so dashboard + color + lidar each get their own process.
     cluster = LocalCluster(
         n_workers=1,
-        threads_per_worker=1,
+        threads_per_worker=4,
         processes=True,
         dashboard_address=None,
     )
@@ -150,7 +145,7 @@ def main() -> None:
     time.sleep(1.5)
     print("starting color_future")  # <- this prints before "dashboard_process" starts
     color_future = client.submit(
-        process2, "color_image", "./dimos/dashboard/support/color_image.yaml", pure=False
+        log_stream_process, "color_image", "./dimos/dashboard/support/color_image.yaml", pure=False
     )
     lidar_future = client.submit(
         log_stream_process, "lidar", "./dimos/dashboard/support/lidar.yaml", pure=False
