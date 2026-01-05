@@ -51,3 +51,6 @@ yolo11n.pt
 .claude
 
 /logs
+
+# direnv
+.direnv/
