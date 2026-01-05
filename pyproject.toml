@@ -242,6 +242,13 @@ drone = [
     "pymavlink"
 ]
 
+[tool.uv]
+extra-build-dependencies = { detectron2 = [
+  "torch",
+], contact-graspnet-pytorch = [
+  "numpy",
+] }
+
 [tool.ruff]
 line-length = 100
 exclude = [
