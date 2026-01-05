@@ -128,9 +128,9 @@ class DataReplay(Module):
 
 # NOTE: this data was recorded with `from dimos.dashboard.support.utils import record_message`
 replay_paths = {
-    "color_image": "./dimos/dashboard/support/color_image.ignore.yaml",
-    "lidar": "./dimos/dashboard/support/lidar.ignore.yaml",
-    # "odom": "./dimos/dashboard/support/odom.ignore.yaml",
+    "color_image": "./dimos/dashboard/support/color_image.yaml",
+    "lidar": "./dimos/dashboard/support/lidar.yaml",
+    # "odom": "./dimos/dashboard/support/odom.yaml",
 }
 blueprint = (
     autoconnect(
