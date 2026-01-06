@@ -34,7 +34,9 @@ import rclpy  # type: ignore[import-untyped]
 from rclpy.node import Node  # type: ignore[import-untyped]
 from reactivex import operators as ops
 from reactivex.subject import Subject
+from cv_bridge import CvBridge
 from sensor_msgs.msg import (  # type: ignore[attr-defined, import-untyped]
+    CompressedImage as ROSCompressedImage,
     Joy as ROSJoy,
     PointCloud2 as ROSPointCloud2,
 )
@@ -56,7 +58,7 @@ from dimos.msgs.geometry_msgs import (
     Vector3,
 )
 from dimos.msgs.nav_msgs import Path
-from dimos.msgs.sensor_msgs import PointCloud2
+from dimos.msgs.sensor_msgs import Image, PointCloud2
 from dimos.msgs.std_msgs import Bool
 from dimos.msgs.tf2_msgs.TFMessage import TFMessage
 from dimos.navigation.base import NavigationInterface, NavigationState
@@ -89,6 +91,7 @@ class ROSNav(
     goal_active: Out[PoseStamped]
     path_active: Out[Path]
     cmd_vel: Out[Twist]
+    color_image: Out[Image]
 
     # Using RxPY Subjects for reactive data flow instead of storing state
     _local_pointcloud_subject: Subject  # type: ignore[type-arg]
@@ -148,6 +151,12 @@ class ROSNav(
 
         self.path_sub = self._node.create_subscription(ROSPath, "/path", self._on_ros_path, 10)
         self.tf_sub = self._node.create_subscription(ROSTFMessage, "/tf", self._on_ros_tf, 10)
+
+        # Image subscription for spatial memory and navigation skills
+        self._bridge = CvBridge()
+        self.image_sub = self._node.create_subscription(
+            ROSCompressedImage, "/camera/color/image_raw/compressed", self._on_ros_compressed_image, 10
+        )
 
         logger.info("NavigationModule initialized with ROS2 node")
 
@@ -238,6 +247,11 @@ class ROSNav(
             map_to_world_tf,
             *ros_tf.transforms,
         )
+
+    def _on_ros_compressed_image(self, msg: ROSCompressedImage) -> None:
+        cv_image = self._bridge.compressed_imgmsg_to_cv2(msg, "rgb8")
+        image = Image.from_numpy(cv_image)
+        self.color_image.publish(image)
 
     def _on_goal_pose(self, msg: PoseStamped) -> None:
         self.navigate_to(msg)

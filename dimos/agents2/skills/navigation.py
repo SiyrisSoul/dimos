@@ -55,7 +55,6 @@ class NavigationSkillContainer(SkillModule):
     ]
 
     color_image: In[Image]
-    odom: In[PoseStamped]
 
     def __init__(self) -> None:
         super().__init__()
@@ -65,7 +64,6 @@ class NavigationSkillContainer(SkillModule):
     @rpc
     def start(self) -> None:
         self._disposables.add(self.color_image.subscribe(self._on_color_image))  # type: ignore[arg-type]
-        self._disposables.add(self.odom.subscribe(self._on_odom))  # type: ignore[arg-type]
         self._skill_started = True
 
     @rpc
@@ -74,9 +72,6 @@ class NavigationSkillContainer(SkillModule):
 
     def _on_color_image(self, image: Image) -> None:
         self._latest_image = image
-
-    def _on_odom(self, odom: PoseStamped) -> None:
-        self._latest_odom = odom
 
     @skill()
     def tag_location(self, location_name: str) -> str:

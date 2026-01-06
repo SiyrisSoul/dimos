@@ -38,6 +38,7 @@ from dimos.navigation.global_planner import astar_planner
 from dimos.navigation.local_planner.holonomic_local_planner import (
     holonomic_local_planner,
 )
+from dimos.navigation.rosnav import ros_nav
 from dimos.perception.object_tracker import object_tracking
 from dimos.perception.spatial_perception import spatial_memory
 from dimos.robot.foxglove_bridge import foxglove_bridge
@@ -134,4 +135,20 @@ agentic_huggingface = autoconnect(
         provider=Provider.HUGGINGFACE,  # type: ignore[attr-defined]
     ),
     _common_agentic,
+)
+
+# ROS Navigation based blueprints - uses ros_nav stack which includes all motion planning
+rosnav_spatial = autoconnect(
+    ros_nav(),
+    spatial_memory(),
+)
+
+rosnav_agentic = autoconnect(
+    rosnav_spatial,
+    llm_agent(
+        model="claude-3-haiku-20240307",
+        provider=Provider.ANTHROPIC,  # type: ignore[attr-defined]
+    ),
+    human_input(),
+    navigation_skill(),
 )
