@@ -53,8 +53,11 @@ yolo11n.pt
 # symlink one of .envrc.* if you'd like to use
 .envrc
 .claude
+.direnv/
 
 /logs
 
 # Mesh artifacts (generated at runtime for RViz visualization)
 /meshes/
+
+*.so
