@@ -43,10 +43,11 @@ all_blueprints = {
     "xarm7-trajectory": "dimos.hardware.manipulators.xarm.blueprints:xarm7_trajectory",
     "xarm-cartesian": "dimos.hardware.manipulators.xarm.blueprints:xarm_cartesian",
     "xarm-trajectory": "dimos.hardware.manipulators.xarm.blueprints:xarm_trajectory",
+    "xarm-dual": "dimos.hardware.manipulators.xarm.blueprints:xarm_dual",
+    "xarm-dual-trajectory": "dimos.hardware.manipulators.xarm.blueprints:xarm_dual_trajectory",
     # Piper manipulator blueprints
-    "piper-servo": "dimos.hardware.manipulators.piper.piper_blueprints:piper_servo",
-    "piper-cartesian": "dimos.hardware.manipulators.piper.piper_blueprints:piper_cartesian",
-    "piper-trajectory": "dimos.hardware.manipulators.piper.piper_blueprints:piper_trajectory",
+    "piper-servo": "dimos.hardware.manipulators.piper.blueprints:piper_servo",
+    "piper-trajectory": "dimos.hardware.manipulators.piper.blueprints:piper_trajectory",
     # Demo blueprints
     "demo-osm": "dimos.mapping.osm.demo_osm:demo_osm",
     "demo-skill": "dimos.agents.skills.demo_skill:demo_skill",

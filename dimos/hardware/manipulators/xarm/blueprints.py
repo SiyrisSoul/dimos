@@ -27,8 +27,12 @@ Usage:
 
 from dimos.core.blueprints import autoconnect
 from dimos.core.transport import LCMTransport
-from dimos.hardware.manipulators.xarm.arm import xarm as xarm_blueprint
-from dimos.manipulation.control import cartesian_motion_controller, joint_trajectory_controller
+from dimos.hardware.manipulators.xarm.arm import XArm, xarm as xarm_blueprint
+from dimos.manipulation.control import (
+    JointTrajectoryController,
+    cartesian_motion_controller,
+    joint_trajectory_controller,
+)
 from dimos.msgs.geometry_msgs import PoseStamped
 from dimos.msgs.sensor_msgs import (
     JointCommand,
@@ -36,6 +40,40 @@ from dimos.msgs.sensor_msgs import (
     RobotState,
 )
 from dimos.msgs.trajectory_msgs import JointTrajectory
+
+# =============================================================================
+# Dual-Arm Subclasses (workaround for module deduplication)
+# =============================================================================
+# To run multiple arms in the same blueprint, we need distinct class names.
+# This gives each arm its own RPC namespace:
+#   - XArmLeft  → /rpc/XArmLeft/start/req
+#   - XArmRight → /rpc/XArmRight/start/req
+# =============================================================================
+
+
+class XArmLeft(XArm):
+    """Left arm instance for dual-arm setups (XArm7)."""
+
+    pass
+
+
+class XArmRight(XArm):
+    """Right arm instance for dual-arm setups (XArm6)."""
+
+    pass
+
+
+class JointTrajectoryControllerLeft(JointTrajectoryController):
+    """Left arm trajectory controller."""
+
+    pass
+
+
+class JointTrajectoryControllerRight(JointTrajectoryController):
+    """Right arm trajectory controller."""
+
+    pass
+
 
 # =============================================================================
 # XArm6 Servo Control Blueprint
@@ -181,11 +219,157 @@ xarm_cartesian = autoconnect(
 )
 
 
+# =============================================================================
+# Dual-Arm Blueprint (XArm7 Left + XArm6 Right)
+# =============================================================================
+# Uses subclasses for separate RPC namespaces + remappings for separate topics.
+# Each arm has its own topics for joint states and commands.
+# =============================================================================
+
+xarm_dual = (
+    autoconnect(
+        XArmLeft.blueprint(
+            ip="192.168.2.235",  # XArm7 - Left arm
+            dof=7,
+            control_rate=100.0,
+            monitor_rate=10.0,
+        ),
+        XArmRight.blueprint(
+            ip="192.168.1.210",  # XArm6 - Right arm
+            dof=6,
+            control_rate=100.0,
+            monitor_rate=10.0,
+        ),
+    )
+    .remappings(
+        [
+            # Remap left arm connections to unique names
+            (XArmLeft, "joint_state", "left_joint_state"),
+            (XArmLeft, "robot_state", "left_robot_state"),
+            (XArmLeft, "joint_position_command", "left_joint_position_command"),
+            # Remap right arm connections to unique names
+            (XArmRight, "joint_state", "right_joint_state"),
+            (XArmRight, "robot_state", "right_robot_state"),
+            (XArmRight, "joint_position_command", "right_joint_position_command"),
+        ]
+    )
+    .transports(
+        {
+            # Left arm (XArm7) topics - use remapped names
+            ("left_joint_state", JointState): LCMTransport("/xarm/left/joint_states", JointState),
+            ("left_robot_state", RobotState): LCMTransport("/xarm/left/robot_state", RobotState),
+            ("left_joint_position_command", JointCommand): LCMTransport(
+                "/xarm/left/joint_position_command", JointCommand
+            ),
+            # Right arm (XArm6) topics - use remapped names
+            ("right_joint_state", JointState): LCMTransport("/xarm/right/joint_states", JointState),
+            ("right_robot_state", RobotState): LCMTransport("/xarm/right/robot_state", RobotState),
+            ("right_joint_position_command", JointCommand): LCMTransport(
+                "/xarm/right/joint_position_command", JointCommand
+            ),
+        }
+    )
+)
+
+
+# =============================================================================
+# Dual-Arm Trajectory Blueprint (XArm7 Left + XArm6 Right + Controllers)
+# =============================================================================
+# Full dual-arm setup with trajectory controllers for each arm.
+# Each arm has independent trajectory execution.
+# =============================================================================
+
+xarm_dual_trajectory = (
+    autoconnect(
+        # Left arm (XArm7)
+        XArmLeft.blueprint(
+            ip="192.168.2.235",
+            dof=7,
+            control_rate=100.0,
+            monitor_rate=10.0,
+        ),
+        # Right arm (XArm6)
+        XArmRight.blueprint(
+            ip="192.168.1.210",
+            dof=6,
+            control_rate=100.0,
+            monitor_rate=10.0,
+        ),
+        # Left trajectory controller
+        JointTrajectoryControllerLeft.blueprint(
+            control_frequency=100.0,
+        ),
+        # Right trajectory controller
+        JointTrajectoryControllerRight.blueprint(
+            control_frequency=100.0,
+        ),
+    )
+    .remappings(
+        [
+            # Left arm connections
+            (XArmLeft, "joint_state", "left_joint_state"),
+            (XArmLeft, "robot_state", "left_robot_state"),
+            (XArmLeft, "joint_position_command", "left_joint_position_command"),
+            # Right arm connections
+            (XArmRight, "joint_state", "right_joint_state"),
+            (XArmRight, "robot_state", "right_robot_state"),
+            (XArmRight, "joint_position_command", "right_joint_position_command"),
+            # Left controller connections - connect to left arm
+            (JointTrajectoryControllerLeft, "joint_state", "left_joint_state"),
+            (JointTrajectoryControllerLeft, "robot_state", "left_robot_state"),
+            (
+                JointTrajectoryControllerLeft,
+                "joint_position_command",
+                "left_joint_position_command",
+            ),
+            (JointTrajectoryControllerLeft, "trajectory", "left_trajectory"),
+            # Right controller connections - connect to right arm
+            (JointTrajectoryControllerRight, "joint_state", "right_joint_state"),
+            (JointTrajectoryControllerRight, "robot_state", "right_robot_state"),
+            (
+                JointTrajectoryControllerRight,
+                "joint_position_command",
+                "right_joint_position_command",
+            ),
+            (JointTrajectoryControllerRight, "trajectory", "right_trajectory"),
+        ]
+    )
+    .transports(
+        {
+            # Left arm topics
+            ("left_joint_state", JointState): LCMTransport("/xarm/left/joint_states", JointState),
+            ("left_robot_state", RobotState): LCMTransport("/xarm/left/robot_state", RobotState),
+            ("left_joint_position_command", JointCommand): LCMTransport(
+                "/xarm/left/joint_position_command", JointCommand
+            ),
+            ("left_trajectory", JointTrajectory): LCMTransport(
+                "/xarm/left/trajectory", JointTrajectory
+            ),
+            # Right arm topics
+            ("right_joint_state", JointState): LCMTransport("/xarm/right/joint_states", JointState),
+            ("right_robot_state", RobotState): LCMTransport("/xarm/right/robot_state", RobotState),
+            ("right_joint_position_command", JointCommand): LCMTransport(
+                "/xarm/right/joint_position_command", JointCommand
+            ),
+            ("right_trajectory", JointTrajectory): LCMTransport(
+                "/xarm/right/trajectory", JointTrajectory
+            ),
+        }
+    )
+)
+
+
 __all__ = [
+    "JointTrajectoryControllerLeft",
+    "JointTrajectoryControllerRight",
+    "XArmLeft",
+    "XArmRight",
     "xarm5_servo",
     "xarm7_servo",
     "xarm7_trajectory",
     "xarm_cartesian",
+    "xarm_dual",
+    "xarm_dual_trajectory",
     "xarm_servo",
     "xarm_trajectory",
 ]
