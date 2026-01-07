@@ -33,6 +33,7 @@ from dimos.agents_deprecated.memory.spatial_vector_db import SpatialVectorDB
 from dimos.agents_deprecated.memory.visual_memory import VisualMemory
 from dimos.constants import DIMOS_PROJECT_ROOT
 from dimos.core import DimosCluster, In, Module, rpc
+from dimos.core.skill_module import SkillModule
 from dimos.msgs.sensor_msgs import Image
 from dimos.types.robot_location import RobotLocation
 from dimos.utils.logging_config import setup_logger
@@ -50,7 +51,7 @@ _VISUAL_MEMORY_PATH = _SPATIAL_MEMORY_DIR / "visual_memory.pkl"
 logger = setup_logger()
 
 
-class SpatialMemory(Module):
+class SpatialMemory(SkillModule):
     """
     A Dask module for building and querying Robot spatial memory.
 
@@ -186,6 +187,9 @@ class SpatialMemory(Module):
     @rpc
     def start(self) -> None:
         super().start()
+        _ = self.tf
+        import time
+        time.sleep(1.0)
 
         # Subscribe to LCM streams
         def set_video(image_msg: Image) -> None:
@@ -217,7 +221,7 @@ class SpatialMemory(Module):
 
     def _process_frame(self) -> None:
         """Process the latest frame with pose data if available."""
-        tf = self.tf.get("map", "base_link")
+        tf = self.tf.get("world", "base_link")
         if self._latest_video_frame is None or tf is None:
             logger.warning(" No video frame available")
             return
