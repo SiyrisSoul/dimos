@@ -84,10 +84,12 @@ arm.move_joint([0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
 1. **Create the backend** (`backend.py`):
 
 ```python
-from dimos.hardware.manipulators.spec import ManipulatorBackend, ControlMode
-
 class MyArmBackend:  # No inheritance needed - just match the Protocol
-    def connect(self, config: dict) -> bool: ...
+    def __init__(self, ip: str = "192.168.1.100", dof: int = 6) -> None:
+        self._ip = ip
+        self._dof = dof
+
+    def connect(self) -> bool: ...
     def disconnect(self) -> None: ...
     def read_joint_positions(self) -> list[float]: ...
     def write_joint_positions(self, positions: list[float], velocity: float = 1.0) -> bool: ...
@@ -107,7 +109,10 @@ class MyArm(Module[MyArmConfig]):
 
     def __init__(self, backend=None, **kwargs):
         super().__init__(**kwargs)
-        self.backend = backend or MyArmBackend()
+        self.backend = backend or MyArmBackend(
+            ip=self.config.ip,
+            dof=self.config.dof,
+        )
         # ... setup control loops
 ```
 

@@ -104,8 +104,11 @@ class Piper(Module[PiperConfig]):
     ) -> None:
         super().__init__(*args, **kwargs)
 
-        # Backend is injectable for testing
-        self.backend: ManipulatorBackend = backend or PiperBackend()
+        # Backend is injectable for testing (pass config to backend __init__)
+        self.backend: ManipulatorBackend = backend or PiperBackend(
+            can_port=self.config.can_port,
+            dof=self.config.dof,
+        )
 
         # Threading state
         self._running = False
@@ -121,12 +124,7 @@ class Piper(Module[PiperConfig]):
 
     def _auto_start(self) -> None:
         """Auto-connect to hardware on initialization."""
-        config_dict = {
-            "can_port": self.config.can_port,
-            "dof": self.config.dof,
-        }
-
-        if not self.backend.connect(config_dict):
+        if not self.backend.connect():
             print(f"WARNING: Failed to connect to Piper on {self.config.can_port}")
             return
 

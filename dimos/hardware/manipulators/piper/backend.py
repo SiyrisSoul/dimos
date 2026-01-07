@@ -44,9 +44,10 @@ class PiperBackend:
     - Velocities: Piper uses internal units, we use rad/s
     """
 
-    def __init__(self) -> None:
+    def __init__(self, can_port: str = "can0", dof: int = 6) -> None:
+        self._can_port = can_port
+        self._dof = dof
         self._sdk: Any = None
-        self._dof: int = 6  # Piper is always 6-DOF
         self._connected: bool = False
         self._enabled: bool = False
         self._control_mode: ControlMode = ControlMode.POSITION
@@ -55,15 +56,13 @@ class PiperBackend:
     # Connection
     # =========================================================================
 
-    def connect(self, config: dict) -> bool:
+    def connect(self) -> bool:
         """Connect to Piper via CAN bus."""
-        can_port = config.get("can_port", "can0")
-
         try:
             from piper_sdk import C_PiperInterface_V2
 
             self._sdk = C_PiperInterface_V2(
-                can_name=can_port,
+                can_name=self._can_port,
                 judge_flag=True,  # Enable safety checks
                 can_auto_init=True,  # Let SDK handle CAN initialization
                 dh_is_offset=False,
@@ -79,17 +78,17 @@ class PiperBackend:
             status = self._sdk.GetArmStatus()
             if status is not None:
                 self._connected = True
-                print(f"Piper connected via CAN port {can_port}")
+                print(f"Piper connected via CAN port {self._can_port}")
                 return True
             else:
-                print(f"ERROR: Failed to connect to Piper on {can_port} - no status received")
+                print(f"ERROR: Failed to connect to Piper on {self._can_port} - no status received")
                 return False
 
         except ImportError:
             print("ERROR: Piper SDK not installed. Please install piper_sdk")
             return False
         except Exception as e:
-            print(f"ERROR: Failed to connect to Piper on {can_port}: {e}")
+            print(f"ERROR: Failed to connect to Piper on {self._can_port}: {e}")
             return False
 
     def disconnect(self) -> None:

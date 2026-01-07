@@ -106,7 +106,7 @@ class ManipulatorBackend(Protocol):
 
     # --- Connection ---
 
-    def connect(self, config: dict) -> bool:
+    def connect(self) -> bool:
         """Connect to hardware. Returns True on success."""
         ...
 

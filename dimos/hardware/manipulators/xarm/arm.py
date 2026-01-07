@@ -107,7 +107,10 @@ class XArm(Module[XArmConfig]):
         super().__init__(*args, **kwargs)
 
         # Backend is injectable for testing
-        self.backend: ManipulatorBackend = backend or XArmBackend()
+        self.backend: ManipulatorBackend = backend or XArmBackend(
+            ip=self.config.ip,
+            dof=self.config.dof,
+        )
 
         # Threading state
         self._running = False
@@ -123,12 +126,7 @@ class XArm(Module[XArmConfig]):
 
     def _auto_start(self) -> None:
         """Auto-connect to hardware on initialization."""
-        config_dict = {
-            "ip": self.config.ip,
-            "dof": self.config.dof,
-        }
-
-        if not self.backend.connect(config_dict):
+        if not self.backend.connect():
             print(f"WARNING: Failed to connect to XArm at {self.config.ip}")
             return
 

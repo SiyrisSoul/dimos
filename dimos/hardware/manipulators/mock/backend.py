@@ -64,12 +64,8 @@ class MockBackend:
     # Connection
     # =========================================================================
 
-    def connect(self, config: dict) -> bool:
+    def connect(self) -> bool:
         """Simulate connection."""
-        self._dof = config.get("dof", self._dof)
-        self._positions = [0.0] * self._dof
-        self._velocities = [0.0] * self._dof
-        self._efforts = [0.0] * self._dof
         self._connected = True
         return True
 

@@ -47,26 +47,24 @@ class XArmBackend:
     - Velocities: XArm uses deg/s, we use rad/s
     """
 
-    def __init__(self) -> None:
+    def __init__(self, ip: str = "192.168.1.185", dof: int = 6) -> None:
+        self._ip = ip
+        self._dof = dof
         self._arm: XArmAPI | None = None
-        self._dof: int = 6
         self._control_mode: ControlMode = ControlMode.POSITION
 
     # =========================================================================
     # Connection
     # =========================================================================
 
-    def connect(self, config: dict) -> bool:
+    def connect(self) -> bool:
         """Connect to XArm via TCP/IP."""
-        ip = config.get("ip", "192.168.1.185")
-        self._dof = config.get("dof", 6)
-
         try:
-            self._arm = XArmAPI(ip)
+            self._arm = XArmAPI(self._ip)
             self._arm.connect()
 
             if not self._arm.connected:
-                print(f"ERROR: XArm at {ip} not reachable (connected=False)")
+                print(f"ERROR: XArm at {self._ip} not reachable (connected=False)")
                 return False
 
             # Initialize to servo mode for high-frequency control
@@ -76,7 +74,7 @@ class XArmBackend:
 
             return True
         except Exception as e:
-            print(f"ERROR: Failed to connect to XArm at {ip}: {e}")
+            print(f"ERROR: Failed to connect to XArm at {self._ip}: {e}")
             return False
 
     def disconnect(self) -> None:
