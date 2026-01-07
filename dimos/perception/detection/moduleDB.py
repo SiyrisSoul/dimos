@@ -280,7 +280,7 @@ class ObjectDBModule(Detection3DModule, TableStr):
         matching = []
         for obj in self.objects.values():
             if obj.name and label.lower() in obj.name.lower():
-                if obj.detections >= 3:  # Filter out noise
+                if obj.detections >= 1:  # Filter out noise
                     matching.append(obj)
         return matching
 

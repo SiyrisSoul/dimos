@@ -189,6 +189,7 @@ class SpatialMemory(Module):
 
         # Subscribe to LCM streams
         def set_video(image_msg: Image) -> None:
+            logger.info("Received camera frame")
             # Convert Image message to numpy array
             if hasattr(image_msg, "data"):
                 frame = image_msg.data
@@ -218,7 +219,14 @@ class SpatialMemory(Module):
         """Process the latest frame with pose data if available."""
         tf = self.tf.get("map", "base_link")
         if self._latest_video_frame is None or tf is None:
+            logger.warning(" No video frame available")
             return
+
+        if tf is None:
+            logger.warning("No TF transform (map -> base_link) available")
+            return
+
+        logger.info(f"Processing frame with TF at ({tf.translation.x:.2f}, {tf.translation.y:.2f})")
 
         # Create Pose object with position and orientation
         current_pose = tf.to_pose()
