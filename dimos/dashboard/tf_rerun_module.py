@@ -98,22 +98,19 @@ class TFRerunModule(Module):
         period_s = 1.0 / max(self._poll_hz, 0.1)
 
         while not self._stop_event.is_set():
-            try:
-                # Snapshot keys to avoid concurrent modification while TF buffer updates.
-                items = list(self.tf.buffers.items())  # type: ignore[attr-defined]
-                for (parent, child), buffer in items:
-                    latest = buffer.get()
-                    if latest is None:
-                        continue
-                    last_ts = self._last_ts_by_edge.get((parent, child))
-                    if last_ts is not None and latest.ts == last_ts:
-                        continue
+            # Snapshot keys to avoid concurrent modification while TF buffer updates.
+            items = list(self.tf.buffers.items())  # type: ignore[attr-defined]
+            for (parent, child), buffer in items:
+                latest = buffer.get()
+                if latest is None:
+                    continue
+                last_ts = self._last_ts_by_edge.get((parent, child))
+                if last_ts is not None and latest.ts == last_ts:
+                    continue
 
-                    # Log under `world/tf/...` so it is visible under the default 3D view origin.
-                    rr.log(f"world/tf/{child}", latest.to_rerun())  # type: ignore[no-untyped-call]
-                    self._last_ts_by_edge[(parent, child)] = latest.ts
-            except Exception as e:
-                logger.warning("TFRerunModule: TF poll loop error", error=str(e))
+                # Log under `world/tf/...` so it is visible under the default 3D view origin.
+                rr.log(f"world/tf/{child}", latest.to_rerun())  # type: ignore[no-untyped-call]
+                self._last_ts_by_edge[(parent, child)] = latest.ts
 
             time.sleep(period_s)
 

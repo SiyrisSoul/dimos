@@ -287,4 +287,4 @@ Go2 connection mode: STA-L
 2026-01-07T12:35:46.190280Z [info     ] Final rotation complete, goal reached                        [dimos/navigation/replanning_a_star/local_planner.py]
 2026-01-07T12:35:46.190650Z [info     ] changed state                                                [dimos/navigation/replanning_a_star/local_planner.py] state=arrived
 2026-01-07T12:35:46.290203Z [info     ] changed state                                                [dimos/navigation/replanning_a_star/local_planner.py] state=idle
-2026-01-07T12:35:46.293115Z [info     ] Arrived at goal. 
+2026-01-07T12:35:46.293115Z [info     ] Arrived at goal.
