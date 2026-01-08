@@ -2,6 +2,7 @@
 **/*.ignore
 **/*.ignore.*
 
+*.pyz
 .vscode/
 
 # Ignore Python cache files
