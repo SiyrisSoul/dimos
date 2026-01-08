@@ -95,14 +95,14 @@ def main():
     installer_status["dry_run"] = bool(args.dry_run)
     installer_status["template_repo"] = bool(getattr(args, "from_dimos_template", False))
 
-    cli_features = []
+    cli_features = None
     if args.features:
         cli_features = [f.strip() for f in args.features.split(",") if f.strip()]
 
     selected_features = []
     if non_interactive:
         system_analysis = get_system_analysis()
-        selected_features = cli_features
+        selected_features = cli_features or []
     else:
         system_analysis, selected_features = phase0(cli_features)
 

@@ -105,6 +105,7 @@ def phase0(cli_features: list[str] | None = None) -> tuple[dict[str, object], li
     # 
     # question 2: which dimos features?
     # 
+    selected_features = []
     if cli_features == None:
         optional = PROJECT_TOML["project"].get("optional-dependencies", {})
         features = [f for f in optional.keys() if f not in ["cpu"]]
