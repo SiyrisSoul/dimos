@@ -43,7 +43,7 @@ def get_system_deps(feature: str | None):
     apt_deps: set[str] = set()
     nix_deps: set[str] = set()
     brew_deps: set[str] = set()
-    
+
     base_pip_deps = list(PROJECT_TOML["project"]["dependencies"])
 
     if feature is None:
@@ -54,8 +54,8 @@ def get_system_deps(feature: str | None):
             pip_deps.extend(PROJECT_TOML["project"]["optional-dependencies"].get(feat, []))
     else:
         pip_deps = list(PROJECT_TOML["project"]["optional-dependencies"].get(feature, []))
-    
-    pip_deps = [re.sub(r"[<=>,;].+", "", dep) for dep in pip_deps+base_pip_deps]
+
+    pip_deps = [re.sub(r"[<=>,;].+", "", dep) for dep in pip_deps + base_pip_deps]
     missing: list[str] = []
 
     for pip_dep in pip_deps:
