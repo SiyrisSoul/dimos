@@ -274,7 +274,7 @@ class XArmSDKWrapper(BaseManipulatorSDK):
         """
         code1 = self.native_sdk.motion_enable(True)
         code2 = self.native_sdk.set_state(0)  # Ready state
-        code3 = self.native_sdk.set_mode(1)  # Servo mode
+        code3 = self.native_sdk.set_mode(0)  # CHANGED FROM 1 TO 0 FOR TRAJECTORY EXECUTION
         return bool(code1 == 0 and code2 == 0 and code3 == 0)
 
     def disable_servos(self) -> bool:

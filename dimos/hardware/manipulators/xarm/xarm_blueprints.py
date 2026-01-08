@@ -161,8 +161,8 @@ xarm5_servo = xarm_driver(
 
 xarm_trajectory = autoconnect(
     xarm_driver(
-        ip="192.168.1.210",
-        dof=6,  # XArm6
+        ip="192.168.2.235",
+        dof=7,  # XArm6
         has_gripper=False,
         has_force_torque=False,
         control_rate=500,
