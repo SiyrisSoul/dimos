@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""If refresh_system_dep_db.py has been run but crashed halfway through, this can finish the job by consolidating the files"""
+"""If refresh_system_dep_db.py has been run but didnt validate all packages (because of OS differences), this can finish the job by consolidating and validating"""
 
 from support.build_help import consolidate_and_validate_distributed_deps
 
