@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -394,7 +394,15 @@ def test_camera_info_from_yaml() -> None:
     """Test loading CameraInfo from YAML file."""
 
     # Get path to the single webcam YAML file
-    yaml_path = get_project_root() / "dimos" / "hardware" / "camera" / "zed" / "single_webcam.yaml"
+    yaml_path = (
+        get_project_root()
+        / "dimos"
+        / "hardware"
+        / "sensors"
+        / "camera"
+        / "zed"
+        / "single_webcam.yaml"
+    )
 
     # Load CameraInfo from YAML
     camera_info = CameraInfo.from_yaml(str(yaml_path))
@@ -429,7 +437,7 @@ def test_camera_info_from_yaml() -> None:
 def test_calibration_provider() -> None:
     """Test CalibrationProvider lazy loading of YAML files."""
     # Get the directory containing calibration files (not the file itself)
-    calibration_dir = get_project_root() / "dimos" / "hardware" / "camera" / "zed"
+    calibration_dir = get_project_root() / "dimos" / "hardware" / "sensors" / "camera" / "zed"
 
     # Create CalibrationProvider instance
     Calibrations = CalibrationProvider(calibration_dir)

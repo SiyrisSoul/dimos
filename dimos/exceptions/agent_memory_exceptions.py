@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -38,14 +38,14 @@ class AgentMemoryConnectionError(AgentMemoryError):
         cause (Exception, optional): Original exception, if any, that led to this error.
     """
 
-    def __init__(self, message: str = "Failed to connect to the database", cause=None) -> None:
+    def __init__(self, message: str = "Failed to connect to the database", cause=None) -> None:  # type: ignore[no-untyped-def]
         super().__init__(message)
         if cause:
             self.cause = cause
         self.traceback = traceback.format_exc() if cause else None
 
     def __str__(self) -> str:
-        return f"{self.message}\nCaused by: {self.cause!r}" if self.cause else self.message
+        return f"{self.message}\nCaused by: {self.cause!r}" if self.cause else self.message  # type: ignore[attr-defined]
 
 
 class UnknownConnectionTypeError(AgentMemoryConnectionError):
@@ -87,7 +87,7 @@ class DataNotFoundError(DataRetrievalError):
         message (str, optional): Human-readable message providing more detail. If not provided, a default message is generated.
     """
 
-    def __init__(self, vector_id, message=None) -> None:
+    def __init__(self, vector_id, message=None) -> None:  # type: ignore[no-untyped-def]
         message = message or f"Requested data for vector ID {vector_id} was not found."
         super().__init__(message)
         self.vector_id = vector_id

@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,14 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dimos.perception.detection.type.detection2d.base import Detection2D
+from dimos.perception.detection.type.detection2d.base import Detection2D, Filter2D
 from dimos.perception.detection.type.detection2d.bbox import Detection2DBBox
 from dimos.perception.detection.type.detection2d.imageDetections2D import ImageDetections2D
 from dimos.perception.detection.type.detection2d.person import Detection2DPerson
+from dimos.perception.detection.type.detection2d.point import Detection2DPoint
 
 __all__ = [
     "Detection2D",
     "Detection2DBBox",
     "Detection2DPerson",
+    "Detection2DPoint",
     "ImageDetections2D",
 ]

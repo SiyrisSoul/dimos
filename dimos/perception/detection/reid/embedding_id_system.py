@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -58,9 +58,9 @@ class EmbeddingIDSystem(IDSystem):
         # Call model factory (class or function) to get model instance
         self.model = model()
 
-        # Call warmup if available
-        if hasattr(self.model, "warmup"):
-            self.model.warmup()
+        # Call start if available (Resource interface)
+        if hasattr(self.model, "start"):
+            self.model.start()
 
         self.padding = padding
         self.similarity_threshold = similarity_threshold
@@ -70,7 +70,7 @@ class EmbeddingIDSystem(IDSystem):
         self.min_embeddings_for_matching = min_embeddings_for_matching
 
         # Track embeddings (list of all embeddings as numpy arrays)
-        self.track_embeddings: dict[int, list[np.ndarray]] = {}
+        self.track_embeddings: dict[int, list[np.ndarray]] = {}  # type: ignore[type-arg]
 
         # Negative constraints (track_ids that co-occurred = different objects)
         self.negative_pairs: dict[int, set[int]] = {}
@@ -129,7 +129,9 @@ class EmbeddingIDSystem(IDSystem):
             embeddings.pop(0)  # Remove oldest
 
     def _compute_group_similarity(
-        self, query_embeddings: list[np.ndarray], candidate_embeddings: list[np.ndarray]
+        self,
+        query_embeddings: list[np.ndarray],  # type: ignore[type-arg]
+        candidate_embeddings: list[np.ndarray],  # type: ignore[type-arg]
     ) -> float:
         """Compute similarity between two groups of embeddings.
 

@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,15 +13,41 @@
 # limitations under the License.
 
 from functools import cached_property
+import re
+from typing import Literal, TypeAlias
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from dimos.mapping.occupancy.path_map import NavigationStrategy
+
+ViewerBackend: TypeAlias = Literal["rerun-web", "rerun-native", "foxglove"]
+
+
+def _get_all_numbers(s: str) -> list[float]:
+    return [float(x) for x in re.findall(r"-?\d+\.?\d*", s)]
 
 
 class GlobalConfig(BaseSettings):
     robot_ip: str | None = None
-    use_simulation: bool = False
-    use_replay: bool = False
+    simulation: bool = False
+    replay: bool = False
+    rerun_enabled: bool = True
+    rerun_server_addr: str | None = None
+    viewer_backend: ViewerBackend = "rerun-native"
     n_dask_workers: int = 2
+    memory_limit: str = "auto"
+    mujoco_camera_position: str | None = None
+    mujoco_room: str | None = None
+    mujoco_room_from_occupancy: str | None = None
+    mujoco_global_costmap_from_occupancy: str | None = None
+    mujoco_global_map_from_pointcloud: str | None = None
+    mujoco_start_pos: str = "-1.0, 1.0"
+    mujoco_steps_per_frame: int = 7
+    robot_model: str | None = None
+    robot_width: float = 0.3
+    robot_rotation_diameter: float = 0.6
+    planner_strategy: NavigationStrategy = "simple"
+    planner_robot_speed: float | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -32,8 +58,19 @@ class GlobalConfig(BaseSettings):
 
     @cached_property
     def unitree_connection_type(self) -> str:
-        if self.use_replay:
-            return "fake"
-        if self.use_simulation:
+        if self.replay:
+            return "replay"
+        if self.simulation:
             return "mujoco"
         return "webrtc"
+
+    @cached_property
+    def mujoco_start_pos_float(self) -> tuple[float, float]:
+        x, y = _get_all_numbers(self.mujoco_start_pos)
+        return (x, y)
+
+    @cached_property
+    def mujoco_camera_position_float(self) -> tuple[float, ...]:
+        if self.mujoco_camera_position is None:
+            return (-0.906, 0.008, 1.101, 4.931, 89.749, -46.378)
+        return tuple(_get_all_numbers(self.mujoco_camera_position))

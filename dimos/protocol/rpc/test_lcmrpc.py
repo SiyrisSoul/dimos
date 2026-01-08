@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ from collections.abc import Generator
 import pytest
 
 from dimos.constants import LCM_MAX_CHANNEL_NAME_LENGTH
-from dimos.protocol.rpc.lcmrpc import LCMRPC
+from dimos.protocol.rpc import LCMRPC
 
 
 @pytest.fixture

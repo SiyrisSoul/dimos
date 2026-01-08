@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import dataclass
 import threading
 import time
 
 import cv2
-from dimos_lcm.sensor_msgs import CameraInfo
 
 # Import LCM messages
 from dimos_lcm.vision_msgs import (
@@ -27,10 +27,14 @@ from dimos_lcm.vision_msgs import (
 import numpy as np
 from reactivex.disposable import Disposable
 
-from dimos.core import In, Module, Out, rpc
+from dimos.core import In, Module, ModuleConfig, Out, rpc
 from dimos.manipulation.visual_servoing.utils import visualize_detections_3d
 from dimos.msgs.geometry_msgs import Pose, Quaternion, Transform, Vector3
-from dimos.msgs.sensor_msgs import Image, ImageFormat
+from dimos.msgs.sensor_msgs import (
+    CameraInfo,
+    Image,
+    ImageFormat,
+)
 from dimos.msgs.std_msgs import Header
 from dimos.msgs.vision_msgs import Detection2DArray, Detection3DArray
 from dimos.protocol.tf import TF
@@ -42,27 +46,32 @@ from dimos.utils.transform_utils import (
     yaw_towards_point,
 )
 
-logger = setup_logger("dimos.perception.object_tracker")
+logger = setup_logger()
 
 
-class ObjectTracking(Module):
+@dataclass
+class ObjectTrackingConfig(ModuleConfig):
+    frame_id: str = "camera_link"
+
+
+class ObjectTracking(Module[ObjectTrackingConfig]):
     """Module for object tracking with LCM input/output."""
 
     # LCM inputs
-    color_image: In[Image] = None
-    depth: In[Image] = None
-    camera_info: In[CameraInfo] = None
+    color_image: In[Image]
+    depth: In[Image]
+    camera_info: In[CameraInfo]
 
     # LCM outputs
-    detection2darray: Out[Detection2DArray] = None
-    detection3darray: Out[Detection3DArray] = None
-    tracked_overlay: Out[Image] = None  # Visualization output
+    detection2darray: Out[Detection2DArray]
+    detection3darray: Out[Detection3DArray]
+    tracked_overlay: Out[Image]  # Visualization output
+
+    default_config = ObjectTrackingConfig
+    config: ObjectTrackingConfig
 
     def __init__(
-        self,
-        reid_threshold: int = 10,
-        reid_fail_tolerance: int = 5,
-        frame_id: str = "camera_link",
+        self, reid_threshold: int = 10, reid_fail_tolerance: int = 5, **kwargs: object
     ) -> None:
         """
         Initialize an object tracking module using OpenCV's CSRT tracker with ORB re-ID.
@@ -73,25 +82,23 @@ class ObjectTracking(Module):
             reid_threshold: Minimum good feature matches needed to confirm re-ID.
             reid_fail_tolerance: Number of consecutive frames Re-ID can fail before
                                  tracking is stopped.
-            frame_id: TF frame ID for the camera (default: "camera_link")
         """
         # Call parent Module init
-        super().__init__()
+        super().__init__(**kwargs)
 
         self.camera_intrinsics = None
         self.reid_threshold = reid_threshold
         self.reid_fail_tolerance = reid_fail_tolerance
-        self.frame_id = frame_id
 
         self.tracker = None
         self.tracking_bbox = None  # Stores (x, y, w, h) for tracker initialization
         self.tracking_initialized = False
-        self.orb = cv2.ORB_create()
+        self.orb = cv2.ORB_create()  # type: ignore[attr-defined]
         self.bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
         self.original_des = None  # Store original ORB descriptors
         self.original_kps = None  # Store original ORB keypoints
         self.reid_fail_count = 0  # Counter for consecutive re-id failures
-        self.last_good_matches = []  # Store good matches for visualization
+        self.last_good_matches = []  # type: ignore[var-annotated]  # Store good matches for visualization
         self.last_roi_kps = None  # Store last ROI keypoints for visualization
         self.last_roi_bbox = None  # Store last ROI bbox for visualization
         self.reid_confirmed = False  # Store current reid confirmation state
@@ -99,8 +106,8 @@ class ObjectTracking(Module):
         self.reid_warmup_frames = 3  # Number of frames before REID starts
 
         self._frame_lock = threading.Lock()
-        self._latest_rgb_frame: np.ndarray | None = None
-        self._latest_depth_frame: np.ndarray | None = None
+        self._latest_rgb_frame: np.ndarray | None = None  # type: ignore[type-arg]
+        self._latest_depth_frame: np.ndarray | None = None  # type: ignore[type-arg]
         self._latest_camera_info: CameraInfo | None = None
 
         # Tracking thread control
@@ -122,7 +129,7 @@ class ObjectTracking(Module):
         super().start()
 
         # Subscribe to aligned rgb and depth streams
-        def on_aligned_frames(frames_tuple) -> None:
+        def on_aligned_frames(frames_tuple) -> None:  # type: ignore[no-untyped-def]
             rgb_msg, depth_msg = frames_tuple
             with self._frame_lock:
                 self._latest_rgb_frame = rgb_msg.data
@@ -135,8 +142,8 @@ class ObjectTracking(Module):
 
         # Create aligned observable for RGB and depth
         aligned_frames = align_timestamped(
-            self.color_image.observable(),
-            self.depth.observable(),
+            self.color_image.observable(),  # type: ignore[no-untyped-call]
+            self.depth.observable(),  # type: ignore[no-untyped-call]
             buffer_size=2.0,  # 2 second buffer
             match_tolerance=0.5,  # 500ms tolerance
         )
@@ -148,15 +155,15 @@ class ObjectTracking(Module):
             self._latest_camera_info = camera_info_msg
             # Extract intrinsics from camera info K matrix
             # K is a 3x3 matrix in row-major order: [fx, 0, cx, 0, fy, cy, 0, 0, 1]
-            self.camera_intrinsics = [
+            self.camera_intrinsics = [  # type: ignore[assignment]
                 camera_info_msg.K[0],
                 camera_info_msg.K[4],
                 camera_info_msg.K[2],
                 camera_info_msg.K[5],
             ]
 
-        unsub = self.camera_info.subscribe(on_camera_info)
-        self._disposables.add(Disposable(unsub))
+        unsub = self.camera_info.subscribe(on_camera_info)  # type: ignore[assignment]
+        self._disposables.add(Disposable(unsub))  # type: ignore[arg-type]
 
     @rpc
     def stop(self) -> None:
@@ -173,7 +180,7 @@ class ObjectTracking(Module):
     def track(
         self,
         bbox: list[float],
-    ) -> dict:
+    ) -> dict:  # type: ignore[type-arg]
         """
         Initialize tracking with a bounding box and process current frame.
 
@@ -193,15 +200,15 @@ class ObjectTracking(Module):
             logger.warning(f"Invalid initial bbox provided: {bbox}. Tracking not started.")
 
         # Set tracking parameters
-        self.tracking_bbox = (x1, y1, w, h)  # Store in (x, y, w, h) format
-        self.tracker = cv2.legacy.TrackerCSRT_create()
+        self.tracking_bbox = (x1, y1, w, h)  # type: ignore[assignment]  # Store in (x, y, w, h) format
+        self.tracker = cv2.legacy.TrackerCSRT_create()  # type: ignore[attr-defined]
         self.tracking_initialized = False
         self.original_des = None
         self.reid_fail_count = 0
         logger.info(f"Tracking target set with bbox: {self.tracking_bbox}")
 
         # Extract initial features
-        roi = self._latest_rgb_frame[y1:y2, x1:x2]
+        roi = self._latest_rgb_frame[y1:y2, x1:x2]  # type: ignore[index]
         if roi.size > 0:
             self.original_kps, self.original_des = self.orb.detectAndCompute(roi, None)
             if self.original_des is None:
@@ -210,7 +217,7 @@ class ObjectTracking(Module):
                 logger.info(f"Initial ORB features extracted: {len(self.original_des)}")
 
             # Initialize the tracker
-            init_success = self.tracker.init(self._latest_rgb_frame, self.tracking_bbox)
+            init_success = self.tracker.init(self._latest_rgb_frame, self.tracking_bbox)  # type: ignore[attr-defined]
             if init_success:
                 self.tracking_initialized = True
                 self.tracking_frame_count = 0  # Reset frame counter
@@ -228,7 +235,7 @@ class ObjectTracking(Module):
         # Return initial tracking result
         return {"status": "tracking_started", "bbox": self.tracking_bbox}
 
-    def reid(self, frame, current_bbox) -> bool:
+    def reid(self, frame, current_bbox) -> bool:  # type: ignore[no-untyped-def]
         """Check if features in current_bbox match stored original features."""
         # During warm-up period, always return True
         if self.tracking_frame_count < self.reid_warmup_frames:
@@ -546,20 +553,20 @@ class ObjectTracking(Module):
                 viz_msg = Image.from_numpy(viz_image)
                 self.tracked_overlay.publish(viz_msg)
 
-    def _draw_reid_matches(self, image: np.ndarray) -> np.ndarray:
+    def _draw_reid_matches(self, image: np.ndarray) -> np.ndarray:  # type: ignore[type-arg]
         """Draw REID feature matches on the image."""
         viz_image = image.copy()
 
-        x1, y1, _x2, _y2 = self.last_roi_bbox
+        x1, y1, _x2, _y2 = self.last_roi_bbox  # type: ignore[misc]
 
         # Draw keypoints from current ROI in green
-        for kp in self.last_roi_kps:
-            pt = (int(kp.pt[0] + x1), int(kp.pt[1] + y1))
+        for kp in self.last_roi_kps:  # type: ignore[attr-defined]
+            pt = (int(kp.pt[0] + x1), int(kp.pt[1] + y1))  # type: ignore[has-type]
             cv2.circle(viz_image, pt, 3, (0, 255, 0), -1)
 
         for match in self.last_good_matches:
-            current_kp = self.last_roi_kps[match.trainIdx]
-            pt_current = (int(current_kp.pt[0] + x1), int(current_kp.pt[1] + y1))
+            current_kp = self.last_roi_kps[match.trainIdx]  # type: ignore[index]
+            pt_current = (int(current_kp.pt[0] + x1), int(current_kp.pt[1] + y1))  # type: ignore[has-type]
 
             # Draw a larger circle for matched points in yellow
             cv2.circle(viz_image, pt_current, 5, (0, 255, 255), 2)  # Yellow for matched points
@@ -590,7 +597,7 @@ class ObjectTracking(Module):
 
         return viz_image
 
-    def _get_depth_from_bbox(self, bbox: list[int], depth_frame: np.ndarray) -> float | None:
+    def _get_depth_from_bbox(self, bbox: list[int], depth_frame: np.ndarray) -> float | None:  # type: ignore[type-arg]
         """Calculate depth from bbox using the 25th percentile of closest points.
 
         Args:

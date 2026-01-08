@@ -1,3 +1,7 @@
+# generic ignore pattern
+**/*.ignore
+**/*.ignore.*
+
 .vscode/
 
 # Ignore Python cache files
@@ -8,6 +12,7 @@ __pycache__/
 *venv*/
 .venv*/
 .ssh/
+.direnv/
 
 # Ignore python tooling dirs
 *.egg-info/
@@ -49,3 +54,12 @@ yolo11n.pt
 # symlink one of .envrc.* if you'd like to use
 .envrc
 .claude
+.direnv/
+
+/logs
+
+*.so
+
+/.mypy_cache*
+
+*mobileclip*

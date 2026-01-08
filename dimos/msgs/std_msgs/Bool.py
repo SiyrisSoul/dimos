@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,12 +18,12 @@
 from dimos_lcm.std_msgs import Bool as LCMBool
 
 try:
-    from std_msgs.msg import Bool as ROSBool
+    from std_msgs.msg import Bool as ROSBool  # type: ignore[attr-defined]
 except ImportError:
-    ROSBool = None
+    ROSBool = None  # type: ignore[assignment, misc]
 
 
-class Bool(LCMBool):
+class Bool(LCMBool):  # type: ignore[misc]
     """ROS-compatible Bool message."""
 
     msg_name = "std_msgs.Bool"
@@ -52,6 +52,6 @@ class Bool(LCMBool):
         """
         if ROSBool is None:
             raise ImportError("ROS std_msgs not available")
-        ros_msg = ROSBool()
+        ros_msg = ROSBool()  # type: ignore[no-untyped-call]
         ros_msg.data = bool(self.data)
         return ros_msg

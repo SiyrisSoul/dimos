@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,13 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import time
 from typing import Literal, TypedDict
 
 from dimos.msgs.geometry_msgs import PoseStamped, Quaternion, Vector3
 from dimos.robot.unitree_webrtc.type.timeseries import (
     Timestamped,
 )
+from dimos.types.timestamped import to_timestamp
 
 raw_odometry_msg_sample = {
     "type": "msg",
@@ -71,11 +71,11 @@ class RawOdometryMessage(TypedDict):
     data: OdometryData
 
 
-class Odometry(PoseStamped, Timestamped):
+class Odometry(PoseStamped, Timestamped):  # type: ignore[misc]
     name = "geometry_msgs.PoseStamped"
 
-    def __init__(self, frame_id: str = "base_link", *args, **kwargs) -> None:
-        super().__init__(frame_id=frame_id, *args, **kwargs)
+    def __init__(self, frame_id: str = "base_link", *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
+        super().__init__(frame_id=frame_id, *args, **kwargs)  # type: ignore[misc]
 
     @classmethod
     def from_msg(cls, msg: RawOdometryMessage) -> "Odometry":
@@ -95,10 +95,7 @@ class Odometry(PoseStamped, Timestamped):
             pose["orientation"].get("w"),
         )
 
-        # ts = to_timestamp(msg["data"]["header"]["stamp"])
-        # lidar / video timestamps are not available from the robot
-        # so we are deferring to local time for everything
-        ts = time.time()
+        ts = to_timestamp(msg["data"]["header"]["stamp"])
         return Odometry(position=pos, orientation=rot, ts=ts, frame_id="world")
 
     def __repr__(self) -> str:

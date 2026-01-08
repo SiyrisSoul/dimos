@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@ from copy import copy
 from dataclasses import dataclass
 from enum import Enum
 import json
-import threading
 import time
 from typing import Any, Literal
 
@@ -28,18 +27,18 @@ from rich.table import Table
 from rich.text import Text
 
 from dimos.core import rpc
-from dimos.core.module import Module, get_loop
+from dimos.core.module import Module, ModuleConfig
 from dimos.protocol.skill.comms import LCMSkillComms, SkillCommsSpec
-from dimos.protocol.skill.skill import SkillConfig, SkillContainer
+from dimos.protocol.skill.skill import SkillConfig, SkillContainer  # type: ignore[attr-defined]
 from dimos.protocol.skill.type import MsgType, Output, Reducer, Return, SkillMsg, Stream
 from dimos.protocol.skill.utils import interpret_tool_call_args
 from dimos.utils.logging_config import setup_logger
 
-logger = setup_logger(__file__)
+logger = setup_logger()
 
 
 @dataclass
-class SkillCoordinatorConfig:
+class SkillCoordinatorConfig(ModuleConfig):
     skill_transport: type[SkillCommsSpec] = LCMSkillComms
 
 
@@ -70,11 +69,11 @@ class SkillState:
     msg_count: int = 0
     sent_tool_msg: bool = False
 
-    start_msg: SkillMsg[Literal[MsgType.start]] = None
-    end_msg: SkillMsg[Literal[MsgType.ret]] = None
-    error_msg: SkillMsg[Literal[MsgType.error]] = None
-    ret_msg: SkillMsg[Literal[MsgType.ret]] = None
-    reduced_stream_msg: list[SkillMsg[Literal[MsgType.reduced_stream]]] = None
+    start_msg: SkillMsg[Literal[MsgType.start]] = None  # type: ignore[assignment]
+    end_msg: SkillMsg[Literal[MsgType.ret]] = None  # type: ignore[assignment]
+    error_msg: SkillMsg[Literal[MsgType.error]] = None  # type: ignore[assignment]
+    ret_msg: SkillMsg[Literal[MsgType.ret]] = None  # type: ignore[assignment]
+    reduced_stream_msg: list[SkillMsg[Literal[MsgType.reduced_stream]]] = None  # type: ignore[assignment]
 
     def __init__(self, call_id: str, name: str, skill_config: SkillConfig | None = None) -> None:
         super().__init__()
@@ -101,22 +100,22 @@ class SkillState:
         else:
             return 0.0
 
-    def content(self) -> dict[str, Any] | str | int | float | None:
+    def content(self) -> dict[str, Any] | str | int | float | None:  # type: ignore[return]
         if self.state == SkillStateEnum.running:
             if self.reduced_stream_msg:
-                return self.reduced_stream_msg.content
+                return self.reduced_stream_msg.content  # type: ignore[attr-defined, no-any-return]
 
         if self.state == SkillStateEnum.completed:
             if self.reduced_stream_msg:  # are we a streaming skill?
-                return self.reduced_stream_msg.content
-            return self.ret_msg.content
+                return self.reduced_stream_msg.content  # type: ignore[attr-defined, no-any-return]
+            return self.ret_msg.content  # type: ignore[return-value]
 
         if self.state == SkillStateEnum.error:
             print("Error msg:", self.error_msg.content)
             if self.reduced_stream_msg:
-                (self.reduced_stream_msg.content + "\n" + self.error_msg.content)
+                (self.reduced_stream_msg.content + "\n" + self.error_msg.content)  # type: ignore[attr-defined]
             else:
-                return self.error_msg.content
+                return self.error_msg.content  # type: ignore[return-value]
 
     def agent_encode(self) -> ToolMessage | str:
         # tool call can emit a single ToolMessage
@@ -126,7 +125,7 @@ class SkillState:
         if not self.sent_tool_msg:
             self.sent_tool_msg = True
             return ToolMessage(
-                self.content() or "Querying, please wait, you will receive a response soon.",
+                self.content() or "Querying, please wait, you will receive a response soon.",  # type: ignore[arg-type]
                 name=self.name,
                 tool_call_id=self.call_id,
             )
@@ -142,11 +141,11 @@ class SkillState:
             )
 
     # returns True if the agent should be called for this message
-    def handle_msg(self, msg: SkillMsg) -> bool:
+    def handle_msg(self, msg: SkillMsg) -> bool:  # type: ignore[type-arg]
         self.msg_count += 1
         if msg.type == MsgType.stream:
             self.state = SkillStateEnum.running
-            self.reduced_stream_msg = self.skill_config.reducer(self.reduced_stream_msg, msg)
+            self.reduced_stream_msg = self.skill_config.reducer(self.reduced_stream_msg, msg)  # type: ignore[arg-type, assignment]
 
             if (
                 self.skill_config.stream == Stream.none
@@ -271,18 +270,15 @@ class SkillCoordinator(Module):
     _skill_state: SkillStateDict  # key is call_id, not skill_name
     _skills: dict[str, SkillConfig]
     _updates_available: asyncio.Event | None
-    _loop: asyncio.AbstractEventLoop | None
-    _loop_thread: threading.Thread | None
     _agent_loop: asyncio.AbstractEventLoop | None
 
-    def __init__(self) -> None:
-        # TODO: Why isn't this super().__init__() ?
-        SkillContainer.__init__(self)
-        self._loop, self._loop_thread = get_loop()
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
         self._static_containers = []
         self._dynamic_containers = []
         self._skills = {}
         self._skill_state = SkillStateDict()
+
         # Defer event creation until we're in the correct loop context
         self._updates_available = None
         self._agent_loop = None
@@ -313,7 +309,7 @@ class SkillCoordinator(Module):
         else:
             ...
             # print(f"[DEBUG] Reusing _updates_available event {id(self._updates_available)}")
-        return self._updates_available
+        return self._updates_available  # type: ignore[return-value]
 
     @rpc
     def start(self) -> None:
@@ -346,9 +342,9 @@ class SkillCoordinator(Module):
     # this can be converted to non-langchain json schema output
     # and langchain takes this output as well
     # just faster for now
-    def get_tools(self) -> list[dict]:
+    def get_tools(self) -> list[dict]:  # type: ignore[type-arg]
         return [
-            langchain_tool(skill_config.f)
+            langchain_tool(skill_config.f)  # type: ignore[arg-type, misc]
             for skill_config in self.skills().values()
             if not skill_config.hide_skill
         ]
@@ -382,7 +378,7 @@ class SkillCoordinator(Module):
 
         arg_list, arg_keywords = interpret_tool_call_args(args)
 
-        return skill_config.call(
+        return skill_config.call(  # type: ignore[no-any-return]
             call_id,
             *arg_list,
             **arg_keywords,
@@ -392,7 +388,7 @@ class SkillCoordinator(Module):
     # Updates local skill state (appends to streamed data if needed etc)
     #
     # Checks if agent needs to be notified (if ToolConfig has Return=call_agent or Stream=call_agent)
-    def handle_message(self, msg: SkillMsg) -> None:
+    def handle_message(self, msg: SkillMsg) -> None:  # type: ignore[type-arg]
         if self._closed_coord:
             import traceback
 
@@ -460,7 +456,7 @@ class SkillCoordinator(Module):
             return False
         return True
 
-    async def wait_for_updates(self, timeout: float | None = None) -> True:
+    async def wait_for_updates(self, timeout: float | None = None) -> True:  # type: ignore[valid-type]
         """Wait for skill updates to become available.
 
         This method should be called by the agent when it's ready to receive updates.
@@ -540,8 +536,8 @@ class SkillCoordinator(Module):
                     logger.info(f"Skill {skill_run.name} (call_id={call_id}) finished")
                     to_delete.append(call_id)
                 if skill_run.state == SkillStateEnum.error:
-                    error_msg = skill_run.error_msg.content.get("msg", "Unknown error")
-                    error_traceback = skill_run.error_msg.content.get(
+                    error_msg = skill_run.error_msg.content.get("msg", "Unknown error")  # type: ignore[union-attr]
+                    error_traceback = skill_run.error_msg.content.get(  # type: ignore[union-attr]
                         "traceback", "No traceback available"
                     )
 
@@ -560,7 +556,7 @@ class SkillCoordinator(Module):
                     logger.debug(
                         f"Resetting accumulator for skill {skill_run.name} (call_id={call_id})"
                     )
-                    skill_run.reduced_stream_msg = None
+                    skill_run.reduced_stream_msg = None  # type: ignore[assignment]
 
             for call_id in to_delete:
                 logger.debug(f"Call {call_id} finished, removing from state")

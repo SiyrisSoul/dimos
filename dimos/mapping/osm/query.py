@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ from dimos.utils.logging_config import setup_logger
 
 _PROLOGUE = "This is an image of an open street map I'm on."
 _JSON = "Please only respond with valid JSON."
-logger = setup_logger(__name__)
+logger = setup_logger()
 
 
 def query_for_one_position(vl_model: VlModel, map_image: MapImage, query: str) -> LatLon | None:

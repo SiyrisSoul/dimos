@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ class AbstractTextEmitter(ABC):
     """Base class for components that emit audio."""
 
     @abstractmethod
-    def emit_text(self) -> Observable:
+    def emit_text(self) -> Observable:  # type: ignore[type-arg]
         """Create an observable that emits audio frames.
 
         Returns:
@@ -34,7 +34,7 @@ class AbstractTextConsumer(ABC):
     """Base class for components that consume audio."""
 
     @abstractmethod
-    def consume_text(self, text_observable: Observable) -> "AbstractTextConsumer":
+    def consume_text(self, text_observable: Observable) -> "AbstractTextConsumer":  # type: ignore[type-arg]
         """Set the audio observable to consume.
 
         Args:

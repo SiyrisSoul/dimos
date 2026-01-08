@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,5 +16,5 @@ from dimos.protocol.pubsub.lcmpubsub import JpegSharedMemoryEncoderMixin
 from dimos.protocol.pubsub.shmpubsub import SharedMemoryPubSubBase
 
 
-class JpegSharedMemory(JpegSharedMemoryEncoderMixin, SharedMemoryPubSubBase):
+class JpegSharedMemory(JpegSharedMemoryEncoderMixin, SharedMemoryPubSubBase):  # type: ignore[misc]
     pass

@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,12 +29,13 @@ import numpy as np
 from reactivex.disposable import Disposable
 
 from dimos.core import In, Module, Out, rpc
+from dimos.mapping.occupancy.inflation import simple_inflate
 from dimos.msgs.geometry_msgs import PoseStamped, Vector3
 from dimos.msgs.nav_msgs import CostValues, OccupancyGrid
 from dimos.utils.logging_config import setup_logger
 from dimos.utils.transform_utils import get_distance
 
-logger = setup_logger("dimos.robot.unitree.frontier_exploration")
+logger = setup_logger()
 
 
 class PointClassification(IntFlag):
@@ -60,14 +61,14 @@ class FrontierCache:
     """Cache for grid points to avoid duplicate point creation."""
 
     def __init__(self) -> None:
-        self.points = {}
+        self.points = {}  # type: ignore[var-annotated]
 
     def get_point(self, x: int, y: int) -> GridPoint:
         """Get or create a grid point at the given coordinates."""
         key = (x, y)
         if key not in self.points:
             self.points[key] = GridPoint(x, y)
-        return self.points[key]
+        return self.points[key]  # type: ignore[no-any-return]
 
     def clear(self) -> None:
         """Clear the point cache."""
@@ -90,16 +91,16 @@ class WavefrontFrontierExplorer(Module):
     """
 
     # LCM inputs
-    global_costmap: In[OccupancyGrid] = None
-    odom: In[PoseStamped] = None
-    goal_reached: In[Bool] = None
-    explore_cmd: In[Bool] = None
-    stop_explore_cmd: In[Bool] = None
+    global_costmap: In[OccupancyGrid]
+    odom: In[PoseStamped]
+    goal_reached: In[Bool]
+    explore_cmd: In[Bool]
+    stop_explore_cmd: In[Bool]
 
     # LCM outputs
-    goal_request: Out[PoseStamped] = None
+    goal_request: Out[PoseStamped]
 
-    def __init__(
+    def __init__(  # type: ignore[no-untyped-def]
         self,
         min_frontier_perimeter: float = 0.5,
         occupancy_threshold: int = 99,
@@ -130,7 +131,7 @@ class WavefrontFrontierExplorer(Module):
         self.info_gain_threshold = info_gain_threshold
         self.num_no_gain_attempts = num_no_gain_attempts
         self._cache = FrontierCache()
-        self.explored_goals = []  # list of explored goals
+        self.explored_goals = []  # type: ignore[var-annotated]  # list of explored goals
         self.exploration_direction = Vector3(0.0, 0.0, 0.0)  # current exploration direction
         self.last_costmap = None  # store last costmap for information comparison
         self.no_gain_counter = 0  # track consecutive no-gain attempts
@@ -651,7 +652,7 @@ class WavefrontFrontierExplorer(Module):
 
         if not frontiers:
             # Store current costmap before returning
-            self.last_costmap = costmap
+            self.last_costmap = costmap  # type: ignore[assignment]
             self.reset_exploration_session()
             return None
 
@@ -664,12 +665,12 @@ class WavefrontFrontierExplorer(Module):
             self.mark_explored_goal(selected_goal)
 
             # Store current costmap for next comparison
-            self.last_costmap = costmap
+            self.last_costmap = costmap  # type: ignore[assignment]
 
             return selected_goal
 
         # Store current costmap before returning
-        self.last_costmap = costmap
+        self.last_costmap = costmap  # type: ignore[assignment]
         return None
 
     def mark_explored_goal(self, goal: Vector3) -> None:
@@ -762,7 +763,7 @@ class WavefrontFrontierExplorer(Module):
             )
 
             # Get exploration goal
-            costmap = self.latest_costmap.inflate(0.25)
+            costmap = simple_inflate(self.latest_costmap, 0.25)
             goal = self.get_exploration_goal(robot_pose, costmap)
 
             if goal:

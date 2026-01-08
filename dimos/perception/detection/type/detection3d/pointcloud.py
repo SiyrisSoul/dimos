@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,9 +18,18 @@ from dataclasses import dataclass
 import functools
 from typing import TYPE_CHECKING, Any
 
-from lcm_msgs.builtin_interfaces import Duration
-from lcm_msgs.foxglove_msgs import CubePrimitive, SceneEntity, TextPrimitive
-from lcm_msgs.geometry_msgs import Point, Pose, Quaternion, Vector3 as LCMVector3
+from lcm_msgs.builtin_interfaces import Duration  # type: ignore[import-not-found]
+from lcm_msgs.foxglove_msgs import (  # type: ignore[import-not-found]
+    CubePrimitive,
+    SceneEntity,
+    TextPrimitive,
+)
+from lcm_msgs.geometry_msgs import (  # type: ignore[import-not-found]
+    Point,
+    Pose,
+    Quaternion,
+    Vector3 as LCMVector3,
+)
 import numpy as np
 
 from dimos.msgs.foxglove_msgs.Color import Color
@@ -63,11 +72,11 @@ class Detection3DPC(Detection3D):
             orientation=(0.0, 0.0, 0.0, 1.0),  # Identity quaternion
         )
 
-    def get_bounding_box(self):
+    def get_bounding_box(self):  # type: ignore[no-untyped-def]
         """Get axis-aligned bounding box of the detection's pointcloud."""
         return self.pointcloud.get_axis_aligned_bounding_box()
 
-    def get_oriented_bounding_box(self):
+    def get_oriented_bounding_box(self):  # type: ignore[no-untyped-def]
         """Get oriented bounding box of the detection's pointcloud."""
         return self.pointcloud.get_oriented_bounding_box()
 
@@ -112,7 +121,7 @@ class Detection3DPC(Detection3D):
         cube = CubePrimitive()
 
         # Get the axis-aligned bounding box
-        aabb = self.get_bounding_box()
+        aabb = self.get_bounding_box()  # type: ignore[no-untyped-call]
 
         # Set pose from axis-aligned bounding box
         cube.pose = Pose()
@@ -243,7 +252,7 @@ class Detection3DPC(Detection3D):
         camera_matrix = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
 
         # Convert pointcloud to numpy array
-        world_points = world_pointcloud.as_numpy()
+        world_points, _ = world_pointcloud.as_numpy()
 
         # Project points to camera frame
         points_homogeneous = np.hstack([world_points, np.ones((world_points.shape[0], 1))])

@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dimos_lcm.vision_msgs.Detection3DArray import Detection3DArray as LCMDetection3DArray
+from dimos_lcm.vision_msgs.Detection3DArray import (
+    Detection3DArray as LCMDetection3DArray,
+)
 
 
-class Detection3DArray(LCMDetection3DArray):
+class Detection3DArray(LCMDetection3DArray):  # type: ignore[misc]
     msg_name = "vision_msgs.Detection3DArray"

@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,12 +27,12 @@ class WeakList:
     """
 
     def __init__(self) -> None:
-        self._refs = []
+        self._refs = []  # type: ignore[var-annotated]
 
     def append(self, obj: Any) -> None:
         """Add an object to the list (stored as weak reference)."""
 
-        def _cleanup(ref) -> None:
+        def _cleanup(ref) -> None:  # type: ignore[no-untyped-def]
             try:
                 self._refs.remove(ref)
             except ValueError:

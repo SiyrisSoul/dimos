@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -54,13 +54,13 @@ class RobotLocation:
         if len(self.position) == 2:
             self.position = (self.position[0], self.position[1], 0.0)
         else:
-            self.position = tuple(float(x) for x in self.position)
+            self.position = tuple(float(x) for x in self.position)  # type: ignore[assignment]
 
         # Ensure rotation is a tuple of 3 floats
         if len(self.rotation) == 1:
             self.rotation = (0.0, 0.0, self.rotation[0])
         else:
-            self.rotation = tuple(float(x) for x in self.rotation)
+            self.rotation = tuple(float(x) for x in self.rotation)  # type: ignore[assignment]
 
     def to_vector_metadata(self) -> dict[str, Any]:
         """

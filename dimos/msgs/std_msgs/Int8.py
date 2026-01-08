@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 
 """Int32 message type."""
 
@@ -22,12 +22,12 @@ from typing import ClassVar
 from dimos_lcm.std_msgs import Int8 as LCMInt8
 
 try:
-    from std_msgs.msg import Int8 as ROSInt8
+    from std_msgs.msg import Int8 as ROSInt8  # type: ignore[attr-defined]
 except ImportError:
-    ROSInt8 = None
+    ROSInt8 = None  # type: ignore[assignment, misc]
 
 
-class Int8(LCMInt8):
+class Int8(LCMInt8):  # type: ignore[misc]
     """ROS-compatible Int32 message."""
 
     msg_name: ClassVar[str] = "std_msgs.Int8"
@@ -56,6 +56,6 @@ class Int8(LCMInt8):
         """
         if ROSInt8 is None:
             raise ImportError("ROS std_msgs not available")
-        ros_msg = ROSInt8()
+        ros_msg = ROSInt8()  # type: ignore[no-untyped-call]
         ros_msg.data = self.data
         return ros_msg

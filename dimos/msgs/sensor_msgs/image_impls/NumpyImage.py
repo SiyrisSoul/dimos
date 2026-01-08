@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,12 +28,12 @@ from dimos.msgs.sensor_msgs.image_impls.AbstractImage import (
 
 @dataclass
 class NumpyImage(AbstractImage):
-    data: np.ndarray
+    data: np.ndarray  # type: ignore[type-arg]
     format: ImageFormat = field(default=ImageFormat.BGR)
     frame_id: str = field(default="")
     ts: float = field(default_factory=time.time)
 
-    def __post_init__(self):
+    def __post_init__(self):  # type: ignore[no-untyped-def]
         if not isinstance(self.data, np.ndarray) or self.data.ndim < 2:
             raise ValueError("NumpyImage requires a 2D/3D NumPy array")
 
@@ -41,7 +41,7 @@ class NumpyImage(AbstractImage):
     def is_cuda(self) -> bool:
         return False
 
-    def to_opencv(self) -> np.ndarray:
+    def to_opencv(self) -> np.ndarray:  # type: ignore[type-arg]
         arr = self.data
         if self.format == ImageFormat.BGR:
             return arr
@@ -62,14 +62,14 @@ class NumpyImage(AbstractImage):
 
     def to_rgb(self) -> NumpyImage:
         if self.format == ImageFormat.RGB:
-            return self.copy()  # type: ignore
+            return self.copy()  # type: ignore[return-value]
         arr = self.data
         if self.format == ImageFormat.BGR:
             return NumpyImage(
                 cv2.cvtColor(arr, cv2.COLOR_BGR2RGB), ImageFormat.RGB, self.frame_id, self.ts
             )
         if self.format == ImageFormat.RGBA:
-            return self.copy()  # RGBA contains RGB + alpha
+            return self.copy()  # type: ignore[return-value]  # RGBA contains RGB + alpha
         if self.format == ImageFormat.BGRA:
             rgba = cv2.cvtColor(arr, cv2.COLOR_BGRA2RGBA)
             return NumpyImage(rgba, ImageFormat.RGBA, self.frame_id, self.ts)
@@ -77,11 +77,11 @@ class NumpyImage(AbstractImage):
             gray8 = (arr / 256).astype(np.uint8) if self.format != ImageFormat.GRAY else arr
             rgb = cv2.cvtColor(gray8, cv2.COLOR_GRAY2RGB)
             return NumpyImage(rgb, ImageFormat.RGB, self.frame_id, self.ts)
-        return self.copy()  # type: ignore
+        return self.copy()  # type: ignore[return-value]
 
     def to_bgr(self) -> NumpyImage:
         if self.format == ImageFormat.BGR:
-            return self.copy()  # type: ignore
+            return self.copy()  # type: ignore[return-value]
         arr = self.data
         if self.format == ImageFormat.RGB:
             return NumpyImage(
@@ -100,11 +100,11 @@ class NumpyImage(AbstractImage):
             return NumpyImage(
                 cv2.cvtColor(gray8, cv2.COLOR_GRAY2BGR), ImageFormat.BGR, self.frame_id, self.ts
             )
-        return self.copy()  # type: ignore
+        return self.copy()  # type: ignore[return-value]
 
     def to_grayscale(self) -> NumpyImage:
         if self.format in (ImageFormat.GRAY, ImageFormat.GRAY16, ImageFormat.DEPTH):
-            return self.copy()  # type: ignore
+            return self.copy()  # type: ignore[return-value]
         if self.format == ImageFormat.BGR:
             return NumpyImage(
                 cv2.cvtColor(self.data, cv2.COLOR_BGR2GRAY),
@@ -125,6 +125,12 @@ class NumpyImage(AbstractImage):
                 cv2.cvtColor(self.data, code), ImageFormat.GRAY, self.frame_id, self.ts
             )
         raise ValueError(f"Unsupported format: {self.format}")
+
+    def to_rerun(self):  # type: ignore[no-untyped-def]
+        """Convert to rerun Image format."""
+        from dimos.msgs.sensor_msgs.image_impls.AbstractImage import format_to_rerun
+
+        return format_to_rerun(self.data, self.format)
 
     def resize(self, width: int, height: int, interpolation: int = cv2.INTER_LINEAR) -> NumpyImage:
         return NumpyImage(
@@ -179,20 +185,20 @@ class NumpyImage(AbstractImage):
     # PnP wrappers
     def solve_pnp(
         self,
-        object_points: np.ndarray,
-        image_points: np.ndarray,
-        camera_matrix: np.ndarray,
-        dist_coeffs: np.ndarray | None = None,
+        object_points: np.ndarray,  # type: ignore[type-arg]
+        image_points: np.ndarray,  # type: ignore[type-arg]
+        camera_matrix: np.ndarray,  # type: ignore[type-arg]
+        dist_coeffs: np.ndarray | None = None,  # type: ignore[type-arg]
         flags: int = cv2.SOLVEPNP_ITERATIVE,
-    ) -> tuple[bool, np.ndarray, np.ndarray]:
+    ) -> tuple[bool, np.ndarray, np.ndarray]:  # type: ignore[type-arg]
         obj = np.asarray(object_points, dtype=np.float32).reshape(-1, 3)
         img = np.asarray(image_points, dtype=np.float32).reshape(-1, 2)
         K = np.asarray(camera_matrix, dtype=np.float64)
         dist = None if dist_coeffs is None else np.asarray(dist_coeffs, dtype=np.float64)
-        ok, rvec, tvec = cv2.solvePnP(obj, img, K, dist, flags=flags)
+        ok, rvec, tvec = cv2.solvePnP(obj, img, K, dist, flags=flags)  # type: ignore[arg-type]
         return bool(ok), rvec.astype(np.float64), tvec.astype(np.float64)
 
-    def create_csrt_tracker(self, bbox: tuple[int, int, int, int]):
+    def create_csrt_tracker(self, bbox: tuple[int, int, int, int]):  # type: ignore[no-untyped-def]
         tracker = None
         if hasattr(cv2, "legacy") and hasattr(cv2.legacy, "TrackerCSRT_create"):
             tracker = cv2.legacy.TrackerCSRT_create()
@@ -205,7 +211,7 @@ class NumpyImage(AbstractImage):
             raise RuntimeError("Failed to initialize CSRT tracker")
         return tracker
 
-    def csrt_update(self, tracker) -> tuple[bool, tuple[int, int, int, int]]:
+    def csrt_update(self, tracker) -> tuple[bool, tuple[int, int, int, int]]:  # type: ignore[no-untyped-def]
         ok, box = tracker.update(self.to_bgr().to_opencv())
         if not ok:
             return False, (0, 0, 0, 0)
@@ -214,15 +220,15 @@ class NumpyImage(AbstractImage):
 
     def solve_pnp_ransac(
         self,
-        object_points: np.ndarray,
-        image_points: np.ndarray,
-        camera_matrix: np.ndarray,
-        dist_coeffs: np.ndarray | None = None,
+        object_points: np.ndarray,  # type: ignore[type-arg]
+        image_points: np.ndarray,  # type: ignore[type-arg]
+        camera_matrix: np.ndarray,  # type: ignore[type-arg]
+        dist_coeffs: np.ndarray | None = None,  # type: ignore[type-arg]
         iterations_count: int = 100,
         reprojection_error: float = 3.0,
         confidence: float = 0.99,
         min_sample: int = 6,
-    ) -> tuple[bool, np.ndarray, np.ndarray, np.ndarray]:
+    ) -> tuple[bool, np.ndarray, np.ndarray, np.ndarray]:  # type: ignore[type-arg]
         obj = np.asarray(object_points, dtype=np.float32).reshape(-1, 3)
         img = np.asarray(image_points, dtype=np.float32).reshape(-1, 2)
         K = np.asarray(camera_matrix, dtype=np.float64)
@@ -231,7 +237,7 @@ class NumpyImage(AbstractImage):
             obj,
             img,
             K,
-            dist,
+            dist,  # type: ignore[arg-type]
             iterationsCount=int(iterations_count),
             reprojectionError=float(reprojection_error),
             confidence=float(confidence),

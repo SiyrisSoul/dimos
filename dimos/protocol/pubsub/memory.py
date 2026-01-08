@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -50,7 +50,7 @@ class Memory(PubSub[str, Any]):
             pass
 
 
-class MemoryWithJSONEncoder(PubSubEncoderMixin, Memory):
+class MemoryWithJSONEncoder(PubSubEncoderMixin, Memory):  # type: ignore[type-arg]
     """Memory PubSub with JSON encoding/decoding."""
 
     def encode(self, msg: Any, topic: str) -> bytes:

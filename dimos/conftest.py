@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,6 +31,17 @@ _seen_threads_lock = threading.RLock()
 _before_test_threads = {}  # Map test name to set of thread IDs before test
 
 _skip_for = ["lcm", "heavy", "ros"]
+
+
+@pytest.fixture(scope="module")
+def dimos_cluster():
+    from dimos.core import start
+
+    dimos = start(4)
+    try:
+        yield dimos
+    finally:
+        dimos.stop()
 
 
 @pytest.hookimpl()
@@ -85,9 +96,14 @@ def monitor_threads(request):
             t for t in threading.enumerate() if t.ident in new_thread_ids and t.name != "MainThread"
         ]
 
-        # Filter out expected persistent threads from Dask that are shared globally
+        # Filter out expected persistent threads that are shared globally
         # These threads are intentionally left running and cleaned up on process exit
-        expected_persistent_thread_prefixes = ["Dask-Offload"]
+        expected_persistent_thread_prefixes = [
+            "Dask-Offload",
+            # HuggingFace safetensors conversion thread - no user cleanup API
+            # https://github.com/huggingface/transformers/issues/29513
+            "Thread-auto_conversion",
+        ]
         new_threads = [
             t
             for t in new_threads

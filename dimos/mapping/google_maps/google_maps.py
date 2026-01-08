@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 
 import os
 
-import googlemaps
+import googlemaps  # type: ignore[import-untyped]
 
 from dimos.mapping.google_maps.types import (
     Coordinates,
@@ -27,7 +27,7 @@ from dimos.mapping.types import LatLon
 from dimos.mapping.utils.distance import distance_in_meters
 from dimos.utils.logging_config import setup_logger
 
-logger = setup_logger(__file__)
+logger = setup_logger()
 
 
 class GoogleMaps:

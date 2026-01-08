@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -59,7 +59,7 @@ class SubscriberBase(Module):
 
 
 class ClassicSubscriber(SubscriberBase):
-    odom: In[Odometry] = None
+    odom: In[Odometry]
     unsub: Callable[[], None] | None = None
     unsub2: Callable[[], None] | None = None
 
@@ -82,7 +82,7 @@ class ClassicSubscriber(SubscriberBase):
 
 
 class RXPYSubscriber(SubscriberBase):
-    odom: In[Odometry] = None
+    odom: In[Odometry]
     unsub: Callable[[], None] | None = None
     unsub2: Callable[[], None] | None = None
 

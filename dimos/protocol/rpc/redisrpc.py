@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,9 +13,9 @@
 # limitations under the License.
 
 from dimos.protocol.pubsub.redispubsub import Redis
-from dimos.protocol.rpc.pubsubrpc import PassThroughPubSubRPC
+from dimos.protocol.rpc.pubsubrpc import PubSubRPCMixin
 
 
-class RedisRPC(PassThroughPubSubRPC, Redis):
+class RedisRPC(PubSubRPCMixin, Redis):  # type: ignore[type-arg]
     def topicgen(self, name: str, req_or_res: bool) -> str:
         return f"/rpc/{name}/{'res' if req_or_res else 'req'}"

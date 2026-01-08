@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,17 +14,20 @@
 
 from __future__ import annotations
 
+import math
 import time
 from typing import BinaryIO, TypeAlias
 
 from dimos_lcm.geometry_msgs import PoseStamped as LCMPoseStamped
 
 try:
-    from geometry_msgs.msg import PoseStamped as ROSPoseStamped
+    from geometry_msgs.msg import (  # type: ignore[attr-defined]
+        PoseStamped as ROSPoseStamped,
+    )
 except ImportError:
-    ROSPoseStamped = None
-
+    ROSPoseStamped = None  # type: ignore[assignment, misc]
 from plum import dispatch
+import rerun as rr
 
 from dimos.msgs.geometry_msgs.Pose import Pose
 from dimos.msgs.geometry_msgs.Quaternion import Quaternion, QuaternionConvertable
@@ -40,7 +43,7 @@ PoseConvertable: TypeAlias = (
 )
 
 
-def sec_nsec(ts):
+def sec_nsec(ts):  # type: ignore[no-untyped-def]
     s = int(ts)
     return [s, int((ts - s) * 1_000_000_000)]
 
@@ -51,7 +54,7 @@ class PoseStamped(Pose, Timestamped):
     frame_id: str
 
     @dispatch
-    def __init__(self, ts: float = 0.0, frame_id: str = "", **kwargs) -> None:
+    def __init__(self, ts: float = 0.0, frame_id: str = "", **kwargs) -> None:  # type: ignore[no-untyped-def]
         self.frame_id = frame_id
         self.ts = ts if ts != 0 else time.time()
         super().__init__(**kwargs)
@@ -59,9 +62,9 @@ class PoseStamped(Pose, Timestamped):
     def lcm_encode(self) -> bytes:
         lcm_mgs = LCMPoseStamped()
         lcm_mgs.pose = self
-        [lcm_mgs.header.stamp.sec, lcm_mgs.header.stamp.nsec] = sec_nsec(self.ts)
+        [lcm_mgs.header.stamp.sec, lcm_mgs.header.stamp.nsec] = sec_nsec(self.ts)  # type: ignore[no-untyped-call]
         lcm_mgs.header.frame_id = self.frame_id
-        return lcm_mgs.lcm_encode()
+        return lcm_mgs.lcm_encode()  # type: ignore[no-any-return]
 
     @classmethod
     def lcm_decode(cls, data: bytes | BinaryIO) -> PoseStamped:
@@ -81,8 +84,33 @@ class PoseStamped(Pose, Timestamped):
     def __str__(self) -> str:
         return (
             f"PoseStamped(pos=[{self.x:.3f}, {self.y:.3f}, {self.z:.3f}], "
-            f"euler=[{self.roll:.3f}, {self.pitch:.3f}, {self.yaw:.3f}])"
+            f"euler=[{math.degrees(self.roll):.1f}, {math.degrees(self.pitch):.1f}, {math.degrees(self.yaw):.1f}])"
         )
+
+    def to_rerun(self):  # type: ignore[no-untyped-def]
+        """Convert to rerun Transform3D format.
+
+        Returns a Transform3D that can be logged to Rerun to position
+        child entities in the transform hierarchy.
+        """
+        return rr.Transform3D(
+            translation=[self.x, self.y, self.z],
+            rotation=rr.Quaternion(
+                xyzw=[
+                    self.orientation.x,
+                    self.orientation.y,
+                    self.orientation.z,
+                    self.orientation.w,
+                ]
+            ),
+        )
+
+    def to_rerun_arrow(self, length: float = 0.5):  # type: ignore[no-untyped-def]
+        """Convert to rerun Arrows3D format for visualization."""
+        origin = [[self.x, self.y, self.z]]
+        forward = self.orientation.rotate_vector(Vector3(length, 0, 0))
+        vector = [[forward.x, forward.y, forward.z]]
+        return rr.Arrows3D(origins=origin, vectors=vector)
 
     def new_transform_to(self, name: str) -> Transform:
         return self.find_transform(
@@ -113,7 +141,7 @@ class PoseStamped(Pose, Timestamped):
         )
 
     @classmethod
-    def from_ros_msg(cls, ros_msg: ROSPoseStamped) -> PoseStamped:
+    def from_ros_msg(cls, ros_msg: ROSPoseStamped) -> PoseStamped:  # type: ignore[override]
         """Create a PoseStamped from a ROS geometry_msgs/PoseStamped message.
 
         Args:
@@ -135,13 +163,13 @@ class PoseStamped(Pose, Timestamped):
             orientation=pose.orientation,
         )
 
-    def to_ros_msg(self) -> ROSPoseStamped:
+    def to_ros_msg(self) -> ROSPoseStamped:  # type: ignore[override]
         """Convert to a ROS geometry_msgs/PoseStamped message.
 
         Returns:
             ROS PoseStamped message
         """
-        ros_msg = ROSPoseStamped()
+        ros_msg = ROSPoseStamped()  # type: ignore[no-untyped-call]
 
         # Set header
         ros_msg.header.frame_id = self.frame_id

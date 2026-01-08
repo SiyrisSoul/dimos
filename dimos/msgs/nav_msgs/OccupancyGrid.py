@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,19 +15,34 @@
 from __future__ import annotations
 
 from enum import IntEnum
+from functools import lru_cache
 import time
-from typing import TYPE_CHECKING, BinaryIO
+from typing import TYPE_CHECKING, Any, BinaryIO
 
-from dimos_lcm.nav_msgs import MapMetaData, OccupancyGrid as LCMOccupancyGrid
-from dimos_lcm.std_msgs import Time as LCMTime
+from dimos_lcm.nav_msgs import (
+    MapMetaData,
+    OccupancyGrid as LCMOccupancyGrid,
+)
+from dimos_lcm.std_msgs import Time as LCMTime  # type: ignore[import-untyped]
+import matplotlib.pyplot as plt
 import numpy as np
-from scipy import ndimage
+from PIL import Image
+import rerun as rr
 
 from dimos.msgs.geometry_msgs import Pose, Vector3, VectorLike
 from dimos.types.timestamped import Timestamped
 
+
+@lru_cache(maxsize=16)
+def _get_matplotlib_cmap(name: str):  # type: ignore[no-untyped-def]
+    """Get a matplotlib colormap by name (cached for performance)."""
+    return plt.get_cmap(name)
+
+
 if TYPE_CHECKING:
-    from dimos.msgs.sensor_msgs import PointCloud2
+    from pathlib import Path
+
+    from numpy.typing import NDArray
 
 
 class CostValues(IntEnum):
@@ -56,11 +71,11 @@ class OccupancyGrid(Timestamped):
     ts: float
     frame_id: str
     info: MapMetaData
-    grid: np.ndarray
+    grid: NDArray[np.int8]
 
     def __init__(
         self,
-        grid: np.ndarray | None = None,
+        grid: NDArray[np.int8] | None = None,
         width: int | None = None,
         height: int | None = None,
         resolution: float = 0.05,
@@ -89,7 +104,7 @@ class OccupancyGrid(Timestamped):
                 raise ValueError("Grid must be a 2D array")
             height, width = grid.shape
             self.info = MapMetaData(
-                map_load_time=self._to_lcm_time(),
+                map_load_time=self._to_lcm_time(),  # type: ignore[no-untyped-call]
                 resolution=resolution,
                 width=width,
                 height=height,
@@ -99,7 +114,7 @@ class OccupancyGrid(Timestamped):
         elif width is not None and height is not None:
             # Initialize with dimensions
             self.info = MapMetaData(
-                map_load_time=self._to_lcm_time(),
+                map_load_time=self._to_lcm_time(),  # type: ignore[no-untyped-call]
                 resolution=resolution,
                 width=width,
                 height=height,
@@ -108,10 +123,10 @@ class OccupancyGrid(Timestamped):
             self.grid = np.full((height, width), -1, dtype=np.int8)
         else:
             # Initialize empty
-            self.info = MapMetaData(map_load_time=self._to_lcm_time())
+            self.info = MapMetaData(map_load_time=self._to_lcm_time())  # type: ignore[no-untyped-call]
             self.grid = np.array([], dtype=np.int8)
 
-    def _to_lcm_time(self):
+    def _to_lcm_time(self):  # type: ignore[no-untyped-def]
         """Convert timestamp to LCM Time."""
 
         s = int(self.ts)
@@ -120,22 +135,22 @@ class OccupancyGrid(Timestamped):
     @property
     def width(self) -> int:
         """Width of the grid in cells."""
-        return self.info.width
+        return self.info.width  # type: ignore[no-any-return]
 
     @property
     def height(self) -> int:
         """Height of the grid in cells."""
-        return self.info.height
+        return self.info.height  # type: ignore[no-any-return]
 
     @property
     def resolution(self) -> float:
         """Grid resolution in meters/cell."""
-        return self.info.resolution
+        return self.info.resolution  # type: ignore[no-any-return]
 
     @property
     def origin(self) -> Pose:
         """Origin pose of the grid."""
-        return self.info.origin
+        return self.info.origin  # type: ignore[no-any-return]
 
     @property
     def total_cells(self) -> int:
@@ -172,40 +187,16 @@ class OccupancyGrid(Timestamped):
         """Percentage of cells that are unknown."""
         return (self.unknown_cells / self.total_cells * 100) if self.total_cells > 0 else 0.0
 
-    def inflate(self, radius: float) -> OccupancyGrid:
-        """Inflate obstacles by a given radius (binary inflation).
-        Args:
-            radius: Inflation radius in meters
-        Returns:
-            New OccupancyGrid with inflated obstacles
-        """
-        # Convert radius to grid cells
-        cell_radius = int(np.ceil(radius / self.resolution))
-
-        # Get grid as numpy array
-        grid_array = self.grid
-
-        # Create circular kernel for binary inflation
-        2 * cell_radius + 1
-        y, x = np.ogrid[-cell_radius : cell_radius + 1, -cell_radius : cell_radius + 1]
-        kernel = (x**2 + y**2 <= cell_radius**2).astype(np.uint8)
-
-        # Find occupied cells
-        occupied_mask = grid_array >= CostValues.OCCUPIED
-
-        # Binary inflation
-        inflated = ndimage.binary_dilation(occupied_mask, structure=kernel)
-        result_grid = grid_array.copy()
-        result_grid[inflated] = CostValues.OCCUPIED
-
-        # Create new OccupancyGrid with inflated data using numpy constructor
-        return OccupancyGrid(
-            grid=result_grid,
-            resolution=self.resolution,
-            origin=self.origin,
-            frame_id=self.frame_id,
-            ts=self.ts,
-        )
+    @classmethod
+    def from_path(cls, path: Path) -> OccupancyGrid:
+        match path.suffix.lower():
+            case ".npy":
+                return cls(grid=np.load(path))
+            case ".png":
+                img = Image.open(path).convert("L")
+                return cls(grid=np.array(img).astype(np.int8))
+            case _:
+                raise NotImplementedError(f"Unsupported file format: {path.suffix}")
 
     def world_to_grid(self, point: VectorLike) -> Vector3:
         """Convert world coordinates to grid coordinates.
@@ -296,7 +287,7 @@ class OccupancyGrid(Timestamped):
             lcm_msg.data_length = 0
             lcm_msg.data = []
 
-        return lcm_msg.lcm_encode()
+        return lcm_msg.lcm_encode()  # type: ignore[no-any-return]
 
     @classmethod
     def lcm_decode(cls, data: bytes | BinaryIO) -> OccupancyGrid:
@@ -325,201 +316,6 @@ class OccupancyGrid(Timestamped):
         )
         instance.info = lcm_msg.info
         return instance
-
-    @classmethod
-    def from_pointcloud(
-        cls,
-        cloud: PointCloud2,
-        resolution: float = 0.05,
-        min_height: float = 0.1,
-        max_height: float = 2.0,
-        frame_id: str | None = None,
-        mark_free_radius: float = 0.4,
-    ) -> OccupancyGrid:
-        """Create an OccupancyGrid from a PointCloud2 message.
-
-        Args:
-            cloud: PointCloud2 message containing 3D points
-            resolution: Grid resolution in meters/cell (default: 0.05)
-            min_height: Minimum height threshold for including points (default: 0.1)
-            max_height: Maximum height threshold for including points (default: 2.0)
-            frame_id: Reference frame for the grid (default: uses cloud's frame_id)
-            mark_free_radius: Radius in meters around obstacles to mark as free space (default: 0.0)
-                             If 0, only immediate neighbors are marked free.
-                             Set to preserve unknown areas for exploration.
-
-        Returns:
-            OccupancyGrid with occupied cells where points were projected
-        """
-
-        # Get points as numpy array
-        points = cloud.as_numpy()
-
-        if len(points) == 0:
-            # Return empty grid
-            return cls(
-                width=1, height=1, resolution=resolution, frame_id=frame_id or cloud.frame_id
-            )
-
-        # Filter points by height for obstacles
-        obstacle_mask = (points[:, 2] >= min_height) & (points[:, 2] <= max_height)
-        obstacle_points = points[obstacle_mask]
-
-        # Get points below min_height for marking as free space
-        ground_mask = points[:, 2] < min_height
-        ground_points = points[ground_mask]
-
-        # Find bounds of the point cloud in X-Y plane (use all points)
-        if len(points) > 0:
-            min_x = np.min(points[:, 0])
-            max_x = np.max(points[:, 0])
-            min_y = np.min(points[:, 1])
-            max_y = np.max(points[:, 1])
-        else:
-            # Return empty grid if no points at all
-            return cls(
-                width=1, height=1, resolution=resolution, frame_id=frame_id or cloud.frame_id
-            )
-
-        # Add some padding around the bounds
-        padding = 1.0  # 1 meter padding
-        min_x -= padding
-        max_x += padding
-        min_y -= padding
-        max_y += padding
-
-        # Calculate grid dimensions
-        width = int(np.ceil((max_x - min_x) / resolution))
-        height = int(np.ceil((max_y - min_y) / resolution))
-
-        # Create origin pose (bottom-left corner of the grid)
-        origin = Pose()
-        origin.position.x = min_x
-        origin.position.y = min_y
-        origin.position.z = 0.0
-        origin.orientation.w = 1.0  # No rotation
-
-        # Initialize grid (all unknown)
-        grid = np.full((height, width), -1, dtype=np.int8)
-
-        # First, mark ground points as free space
-        if len(ground_points) > 0:
-            ground_x = ((ground_points[:, 0] - min_x) / resolution).astype(np.int32)
-            ground_y = ((ground_points[:, 1] - min_y) / resolution).astype(np.int32)
-
-            # Clip indices to grid bounds
-            ground_x = np.clip(ground_x, 0, width - 1)
-            ground_y = np.clip(ground_y, 0, height - 1)
-
-            # Mark ground cells as free
-            grid[ground_y, ground_x] = 0  # Free space
-
-        # Then mark obstacle points (will override ground if at same location)
-        if len(obstacle_points) > 0:
-            obs_x = ((obstacle_points[:, 0] - min_x) / resolution).astype(np.int32)
-            obs_y = ((obstacle_points[:, 1] - min_y) / resolution).astype(np.int32)
-
-            # Clip indices to grid bounds
-            obs_x = np.clip(obs_x, 0, width - 1)
-            obs_y = np.clip(obs_y, 0, height - 1)
-
-            # Mark cells as occupied
-            grid[obs_y, obs_x] = 100  # Lethal obstacle
-
-        # Apply mark_free_radius to expand free space areas
-        if mark_free_radius > 0:
-            # Expand existing free space areas by the specified radius
-            # This will NOT expand from obstacles, only from free space
-
-            free_mask = grid == 0  # Current free space
-            free_radius_cells = int(np.ceil(mark_free_radius / resolution))
-
-            # Create circular kernel
-            y, x = np.ogrid[
-                -free_radius_cells : free_radius_cells + 1,
-                -free_radius_cells : free_radius_cells + 1,
-            ]
-            kernel = x**2 + y**2 <= free_radius_cells**2
-
-            # Dilate free space areas
-            expanded_free = ndimage.binary_dilation(free_mask, structure=kernel, iterations=1)
-
-            # Mark expanded areas as free, but don't override obstacles
-            grid[expanded_free & (grid != 100)] = 0
-
-        # Create and return OccupancyGrid
-        # Get timestamp from cloud if available
-        ts = cloud.ts if hasattr(cloud, "ts") and cloud.ts is not None else 0.0
-
-        occupancy_grid = cls(
-            grid=grid,
-            resolution=resolution,
-            origin=origin,
-            frame_id=frame_id or cloud.frame_id,
-            ts=ts,
-        )
-
-        return occupancy_grid
-
-    def gradient(self, obstacle_threshold: int = 50, max_distance: float = 2.0) -> OccupancyGrid:
-        """Create a gradient OccupancyGrid for path planning.
-
-        Creates a gradient where free space has value 0 and values increase near obstacles.
-        This can be used as a cost map for path planning algorithms like A*.
-
-        Args:
-            obstacle_threshold: Cell values >= this are considered obstacles (default: 50)
-            max_distance: Maximum distance to compute gradient in meters (default: 2.0)
-
-        Returns:
-            New OccupancyGrid with gradient values:
-            - -1: Unknown cells (preserved as-is)
-            - 0: Free space far from obstacles
-            - 1-99: Increasing cost as you approach obstacles
-            - 100: At obstacles
-
-        Note: Unknown cells remain as unknown (-1) and do not receive gradient values.
-        """
-
-        # Remember which cells are unknown
-        unknown_mask = self.grid == CostValues.UNKNOWN
-
-        # Create binary obstacle map
-        # Consider cells >= threshold as obstacles (1), everything else as free (0)
-        # Unknown cells are not considered obstacles for distance calculation
-        obstacle_map = (self.grid >= obstacle_threshold).astype(np.float32)
-
-        # Compute distance transform (distance to nearest obstacle in cells)
-        # Unknown cells are treated as if they don't exist for distance calculation
-        distance_cells = ndimage.distance_transform_edt(1 - obstacle_map)
-
-        # Convert to meters and clip to max distance
-        distance_meters = np.clip(distance_cells * self.resolution, 0, max_distance)
-
-        # Invert and scale to 0-100 range
-        # Far from obstacles (max_distance) -> 0
-        # At obstacles (0 distance) -> 100
-        gradient_values = (1 - distance_meters / max_distance) * 100
-
-        # Ensure obstacles are exactly 100
-        gradient_values[obstacle_map > 0] = CostValues.OCCUPIED
-
-        # Convert to int8 for OccupancyGrid
-        gradient_data = gradient_values.astype(np.int8)
-
-        # Preserve unknown cells as unknown (don't apply gradient to them)
-        gradient_data[unknown_mask] = CostValues.UNKNOWN
-
-        # Create new OccupancyGrid with gradient
-        gradient_grid = OccupancyGrid(
-            grid=gradient_data,
-            resolution=self.resolution,
-            origin=self.origin,
-            frame_id=self.frame_id,
-            ts=self.ts,
-        )
-
-        return gradient_grid
 
     def filter_above(self, threshold: int) -> OccupancyGrid:
         """Create a new OccupancyGrid with only values above threshold.
@@ -606,3 +402,281 @@ class OccupancyGrid(Timestamped):
         )
 
         return maxed
+
+    def copy(self) -> OccupancyGrid:
+        """Create a deep copy of the OccupancyGrid.
+
+        Returns:
+            A new OccupancyGrid instance with copied data.
+        """
+        return OccupancyGrid(
+            grid=self.grid.copy(),
+            resolution=self.resolution,
+            origin=self.origin,
+            frame_id=self.frame_id,
+            ts=self.ts,
+        )
+
+    def cell_value(self, world_position: Vector3) -> int:
+        grid_position = self.world_to_grid(world_position)
+        x = int(grid_position.x)
+        y = int(grid_position.y)
+
+        if not (0 <= x < self.width and 0 <= y < self.height):
+            return CostValues.UNKNOWN
+
+        return int(self.grid[y, x])
+
+    def to_rerun(  # type: ignore[no-untyped-def]
+        self,
+        colormap: str | None = None,
+        mode: str = "image",
+        z_offset: float = 0.01,
+        **kwargs: Any,
+    ):  # type: ignore[no-untyped-def]
+        """Convert to Rerun visualization format.
+
+        Args:
+            colormap: Optional colormap name (e.g., "RdBu_r" for blue=free, red=occupied).
+                     If None, uses grayscale for image mode or default colors for 3D modes.
+            mode: Visualization mode:
+                - "image": 2D grayscale/colored image (default)
+                - "mesh": 3D textured plane overlay on floor
+                - "points": 3D points for occupied cells only
+            z_offset: Height offset for 3D modes (default 0.01m above floor)
+            **kwargs: Additional args (ignored for compatibility)
+
+        Returns:
+            Rerun archetype for logging (rr.Image, rr.Mesh3D, or rr.Points3D)
+
+        The visualization uses:
+        - Free space (value 0): white/blue
+        - Unknown space (value -1): gray/transparent
+        - Occupied space (value > 0): black/red with gradient
+        """
+        if self.grid.size == 0:
+            if mode == "image":
+                return rr.Image(np.zeros((1, 1), dtype=np.uint8), color_model="L")
+            elif mode == "mesh":
+                return rr.Mesh3D(vertex_positions=[])
+            else:
+                return rr.Points3D([])
+
+        if mode == "points":
+            return self._to_rerun_points(colormap, z_offset)
+        elif mode == "mesh":
+            return self._to_rerun_mesh(colormap, z_offset)
+        else:
+            return self._to_rerun_image(colormap)
+
+    def _to_rerun_image(self, colormap: str | None = None):  # type: ignore[no-untyped-def]
+        """Convert to 2D image visualization."""
+        # Use existing cached visualization functions for supported palettes
+        if colormap in ("turbo", "rainbow"):
+            from dimos.mapping.occupancy.visualizations import rainbow_image, turbo_image
+
+            if colormap == "turbo":
+                bgr_image = turbo_image(self.grid)
+            else:
+                bgr_image = rainbow_image(self.grid)
+
+            # Convert BGR to RGB and flip for world coordinates
+            rgb_image = np.flipud(bgr_image[:, :, ::-1])
+            return rr.Image(rgb_image, color_model="RGB")
+
+        if colormap is not None:
+            # Use matplotlib colormap (cached for performance)
+            cmap = _get_matplotlib_cmap(colormap)
+
+            grid_float = self.grid.astype(np.float32)
+
+            # Create RGBA image
+            vis = np.zeros((self.height, self.width, 4), dtype=np.uint8)
+
+            # Free space: low cost (blue in RdBu_r)
+            free_mask = self.grid == 0
+            # Occupied: high cost (red in RdBu_r)
+            occupied_mask = self.grid > 0
+            # Unknown: transparent gray
+            unknown_mask = self.grid == -1
+
+            # Map free to 0, costs to normalized value
+            if np.any(free_mask):
+                colors_free = (cmap(0.0)[:3] * np.array([255, 255, 255])).astype(np.uint8)
+                vis[free_mask, :3] = colors_free
+                vis[free_mask, 3] = 255
+
+            if np.any(occupied_mask):
+                # Normalize costs 1-100 to 0.5-1.0 range
+                costs = grid_float[occupied_mask]
+                cost_norm = 0.5 + (costs / 100) * 0.5
+                colors_occ = (cmap(cost_norm)[:, :3] * 255).astype(np.uint8)
+                vis[occupied_mask, :3] = colors_occ
+                vis[occupied_mask, 3] = 255
+
+            if np.any(unknown_mask):
+                vis[unknown_mask] = [128, 128, 128, 100]  # Semi-transparent gray
+
+            # Flip vertically to match world coordinates (y=0 at bottom)
+            return rr.Image(np.flipud(vis), color_model="RGBA")
+
+        # Grayscale visualization (no colormap)
+        vis_gray = np.zeros((self.height, self.width), dtype=np.uint8)
+
+        # Free space = white
+        vis_gray[self.grid == 0] = 255
+
+        # Unknown = gray
+        vis_gray[self.grid == -1] = 128
+
+        # Occupied (100) = black, costs (1-99) = gradient
+        occupied_mask = self.grid > 0
+        if np.any(occupied_mask):
+            # Map 1-100 to 127-0 (darker = more occupied)
+            costs = self.grid[occupied_mask].astype(np.float32)
+            vis_gray[occupied_mask] = (127 * (1 - costs / 100)).astype(np.uint8)
+
+        # Flip vertically to match world coordinates (y=0 at bottom)
+        return rr.Image(np.flipud(vis_gray), color_model="L")
+
+    def _to_rerun_points(self, colormap: str | None = None, z_offset: float = 0.01):  # type: ignore[no-untyped-def]
+        """Convert to 3D points for occupied cells."""
+        # Find occupied cells (cost > 0)
+        occupied_mask = self.grid > 0
+        if not np.any(occupied_mask):
+            return rr.Points3D([])
+
+        # Get grid coordinates of occupied cells
+        gy, gx = np.where(occupied_mask)
+        costs = self.grid[occupied_mask].astype(np.float32)
+
+        # Convert to world coordinates
+        ox = self.origin.position.x
+        oy = self.origin.position.y
+        wx = ox + (gx + 0.5) * self.resolution
+        wy = oy + (gy + 0.5) * self.resolution
+        wz = np.full_like(wx, z_offset)
+
+        points = np.column_stack([wx, wy, wz])
+
+        # Determine colors
+        if colormap is not None:
+            # Normalize costs to 0-1 range
+            cost_norm = costs / 100.0
+            cmap = _get_matplotlib_cmap(colormap)
+            point_colors = (cmap(cost_norm)[:, :3] * 255).astype(np.uint8)
+        else:
+            # Default: red gradient based on cost
+            intensity = (costs / 100.0 * 255).astype(np.uint8)
+            point_colors = np.column_stack(
+                [intensity, np.zeros_like(intensity), np.zeros_like(intensity)]
+            )
+
+        return rr.Points3D(
+            positions=points,
+            radii=self.resolution / 2,
+            colors=point_colors,
+        )
+
+    def _to_rerun_mesh(self, colormap: str | None = None, z_offset: float = 0.01):  # type: ignore[no-untyped-def]
+        """Convert to 3D mesh overlay on floor plane.
+
+        Only renders known cells (free or occupied), skipping unknown cells.
+        Uses per-vertex colors for proper alpha blending.
+        Fully vectorized for performance (~100x faster than loop version).
+        """
+        # Only render known cells (not unknown = -1)
+        known_mask = self.grid != -1
+        if not np.any(known_mask):
+            return rr.Mesh3D(vertex_positions=[])
+
+        # Get grid coordinates of known cells
+        gy, gx = np.where(known_mask)
+        n_cells = len(gy)
+
+        ox = self.origin.position.x
+        oy = self.origin.position.y
+        r = self.resolution
+
+        # === VECTORIZED VERTEX GENERATION ===
+        # World positions of cell corners (bottom-left of each cell)
+        wx = ox + gx.astype(np.float32) * r
+        wy = oy + gy.astype(np.float32) * r
+
+        # Each cell has 4 vertices: (wx,wy), (wx+r,wy), (wx+r,wy+r), (wx,wy+r)
+        # Shape: (n_cells, 4, 3)
+        vertices = np.zeros((n_cells, 4, 3), dtype=np.float32)
+        vertices[:, 0, 0] = wx
+        vertices[:, 0, 1] = wy
+        vertices[:, 0, 2] = z_offset
+        vertices[:, 1, 0] = wx + r
+        vertices[:, 1, 1] = wy
+        vertices[:, 1, 2] = z_offset
+        vertices[:, 2, 0] = wx + r
+        vertices[:, 2, 1] = wy + r
+        vertices[:, 2, 2] = z_offset
+        vertices[:, 3, 0] = wx
+        vertices[:, 3, 1] = wy + r
+        vertices[:, 3, 2] = z_offset
+        # Flatten to (n_cells*4, 3)
+        flat_vertices = vertices.reshape(-1, 3)
+
+        # === VECTORIZED INDEX GENERATION ===
+        # Base vertex indices for each cell: [0, 4, 8, 12, ...]
+        base_v = np.arange(n_cells, dtype=np.uint32) * 4
+        # Two triangles per cell: (0,1,2) and (0,2,3) relative to base
+        indices = np.zeros((n_cells, 2, 3), dtype=np.uint32)
+        indices[:, 0, 0] = base_v
+        indices[:, 0, 1] = base_v + 1
+        indices[:, 0, 2] = base_v + 2
+        indices[:, 1, 0] = base_v
+        indices[:, 1, 1] = base_v + 2
+        indices[:, 1, 2] = base_v + 3
+        # Flatten to (n_cells*2, 3)
+        flat_indices = indices.reshape(-1, 3)
+
+        # === VECTORIZED COLOR GENERATION ===
+        cell_values = self.grid[gy, gx]  # Get all cell values at once
+
+        if colormap:
+            cmap = _get_matplotlib_cmap(colormap)
+            # Normalize costs: free(0) -> 0.0, cost(1-100) -> 0.5-1.0
+            cost_norm = np.where(cell_values == 0, 0.0, 0.5 + (cell_values / 100) * 0.5)
+            # Sample colormap for all cells at once (returns Nx4 RGBA float)
+            rgba_float = cmap(cost_norm)[:, :3]  # Drop alpha, we set our own
+            rgb = (rgba_float * 255).astype(np.uint8)
+            # Alpha: 180 for free, 220 for occupied
+            alpha = np.where(cell_values == 0, 180, 220).astype(np.uint8)
+        else:
+            # Foxglove-style coloring: blue-purple for free, black for occupied
+            # Free (0): #484981 = RGB(72, 73, 129)
+            # Occupied (100): #000000 = RGB(0, 0, 0)
+            rgb = np.zeros((n_cells, 3), dtype=np.uint8)
+            is_free = cell_values == 0
+            is_occupied = ~is_free
+
+            # Free space: blue-purple #484981
+            rgb[is_free] = [72, 73, 129]
+
+            # Occupied: gradient from blue-purple to black based on cost
+            # cost 1 -> mostly blue-purple, cost 100 -> black
+            if np.any(is_occupied):
+                costs = cell_values[is_occupied].astype(np.float32)
+                # Linear interpolation: (1 - cost/100) * blue-purple
+                factor = (1 - costs / 100).clip(0, 1)
+                rgb[is_occupied, 0] = (72 * factor).astype(np.uint8)
+                rgb[is_occupied, 1] = (73 * factor).astype(np.uint8)
+                rgb[is_occupied, 2] = (129 * factor).astype(np.uint8)
+
+            alpha = np.where(is_free, 180, 220).astype(np.uint8)
+
+        # Combine RGB and alpha into RGBA
+        colors_per_cell = np.column_stack([rgb, alpha])  # (n_cells, 4)
+        # Repeat each color 4 times (one per vertex)
+        colors = np.repeat(colors_per_cell, 4, axis=0)  # (n_cells*4, 4)
+
+        return rr.Mesh3D(
+            vertex_positions=flat_vertices,
+            triangle_indices=flat_indices,
+            vertex_colors=colors,
+        )

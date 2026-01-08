@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,24 +15,32 @@ import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
-import inspect
+import sys
 import threading
 from typing import (
+    TYPE_CHECKING,
     Any,
     get_args,
     get_origin,
     get_type_hints,
+    overload,
 )
+
+if TYPE_CHECKING:
+    from dimos.core.introspection.module import ModuleInfo
 
 from dask.distributed import Actor, get_worker
 from reactivex.disposable import CompositeDisposable
+from typing_extensions import TypeVar
 
 from dimos.core import colors
 from dimos.core.core import T, rpc
+from dimos.core.introspection.module import extract_module_info, render_module_io
 from dimos.core.resource import Resource
+from dimos.core.rpc_client import RpcCall
 from dimos.core.stream import In, Out, RemoteIn, RemoteOut, Transport
 from dimos.protocol.rpc import LCMRPC, RPCSpec
-from dimos.protocol.service import Configurable
+from dimos.protocol.service import Configurable  # type: ignore[attr-defined]
 from dimos.protocol.skill.skill import SkillContainer
 from dimos.protocol.tf import LCMTF, TFSpec
 from dimos.utils.generic import classproperty
@@ -70,18 +78,26 @@ def get_loop() -> tuple[asyncio.AbstractEventLoop, threading.Thread | None]:
 class ModuleConfig:
     rpc_transport: type[RPCSpec] = LCMRPC
     tf_transport: type[TFSpec] = LCMTF
+    frame_id_prefix: str | None = None
+    frame_id: str | None = None
 
 
-class ModuleBase(Configurable[ModuleConfig], SkillContainer, Resource):
+ModuleConfigT = TypeVar("ModuleConfigT", bound=ModuleConfig, default=ModuleConfig)
+
+
+class ModuleBase(Configurable[ModuleConfigT], SkillContainer, Resource):
     _rpc: RPCSpec | None = None
     _tf: TFSpec | None = None
     _loop: asyncio.AbstractEventLoop | None = None
     _loop_thread: threading.Thread | None
     _disposables: CompositeDisposable
+    _bound_rpc_calls: dict[str, RpcCall] = {}
 
-    default_config = ModuleConfig
+    rpc_calls: list[str] = []
 
-    def __init__(self, *args, **kwargs) -> None:
+    default_config: type[ModuleConfigT] = ModuleConfig  # type: ignore[assignment]
+
+    def __init__(self, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
         super().__init__(*args, **kwargs)
         self._loop, self._loop_thread = get_loop()
         self._disposables = CompositeDisposable()
@@ -92,9 +108,16 @@ class ModuleBase(Configurable[ModuleConfig], SkillContainer, Resource):
             # and we register our RPC server
             self.rpc = self.config.rpc_transport()
             self.rpc.serve_module_rpc(self)
-            self.rpc.start()
+            self.rpc.start()  # type: ignore[attr-defined]
         except ValueError:
             ...
+
+    @property
+    def frame_id(self) -> str:
+        base = self.config.frame_id or self.__class__.__name__
+        if self.config.frame_id_prefix:
+            return f"{self.config.frame_id_prefix}/{base}"
+        return base
 
     @rpc
     def start(self) -> None:
@@ -109,7 +132,7 @@ class ModuleBase(Configurable[ModuleConfig], SkillContainer, Resource):
         self._close_rpc()
         if hasattr(self, "_loop") and self._loop_thread:
             if self._loop_thread.is_alive():
-                self._loop.call_soon_threadsafe(self._loop.stop)
+                self._loop.call_soon_threadsafe(self._loop.stop)  # type: ignore[union-attr]
                 self._loop_thread.join(timeout=2)
             self._loop = None
             self._loop_thread = None
@@ -122,10 +145,10 @@ class ModuleBase(Configurable[ModuleConfig], SkillContainer, Resource):
     def _close_rpc(self) -> None:
         # Using hasattr is needed because SkillCoordinator skips ModuleBase.__init__ and self.rpc is never set.
         if hasattr(self, "rpc") and self.rpc:
-            self.rpc.stop()
-            self.rpc = None
+            self.rpc.stop()  # type: ignore[attr-defined]
+            self.rpc = None  # type: ignore[assignment]
 
-    def __getstate__(self):
+    def __getstate__(self):  # type: ignore[no-untyped-def]
         """Exclude unpicklable runtime attributes when serializing."""
         state = self.__dict__.copy()
         # Remove unpicklable attributes
@@ -136,7 +159,7 @@ class ModuleBase(Configurable[ModuleConfig], SkillContainer, Resource):
         state.pop("_tf", None)
         return state
 
-    def __setstate__(self, state) -> None:
+    def __setstate__(self, state) -> None:  # type: ignore[no-untyped-def]
         """Restore object from pickled state."""
         self.__dict__.update(state)
         # Reinitialize runtime attributes
@@ -147,14 +170,14 @@ class ModuleBase(Configurable[ModuleConfig], SkillContainer, Resource):
         self._tf = None
 
     @property
-    def tf(self):
+    def tf(self):  # type: ignore[no-untyped-def]
         if self._tf is None:
             # self._tf = self.config.tf_transport()
             self._tf = LCMTF()
         return self._tf
 
     @tf.setter
-    def tf(self, value) -> None:
+    def tf(self, value) -> None:  # type: ignore[no-untyped-def]
         import warnings
 
         warnings.warn(
@@ -164,7 +187,7 @@ class ModuleBase(Configurable[ModuleConfig], SkillContainer, Resource):
         )
 
     @property
-    def outputs(self) -> dict[str, Out]:
+    def outputs(self) -> dict[str, Out]:  # type: ignore[type-arg]
         return {
             name: s
             for name, s in self.__dict__.items()
@@ -172,86 +195,199 @@ class ModuleBase(Configurable[ModuleConfig], SkillContainer, Resource):
         }
 
     @property
-    def inputs(self) -> dict[str, In]:
+    def inputs(self) -> dict[str, In]:  # type: ignore[type-arg]
         return {
             name: s
             for name, s in self.__dict__.items()
             if isinstance(s, In) and not name.startswith("_")
         }
 
-    @classmethod
-    @property
-    def rpcs(cls) -> dict[str, Callable]:
+    @classproperty
+    def rpcs(self) -> dict[str, Callable[..., Any]]:
         return {
-            name: getattr(cls, name)
-            for name in dir(cls)
+            name: getattr(self, name)
+            for name in dir(self)
             if not name.startswith("_")
             and name != "rpcs"  # Exclude the rpcs property itself to prevent recursion
-            and callable(getattr(cls, name, None))
-            and hasattr(getattr(cls, name), "__rpc__")
+            and callable(getattr(self, name, None))
+            and hasattr(getattr(self, name), "__rpc__")
         }
 
     @rpc
-    def io(self) -> str:
-        def _box(name: str) -> str:
-            return [
-                "┌┴" + "─" * (len(name) + 1) + "┐",
-                f"│ {name} │",
-                "└┬" + "─" * (len(name) + 1) + "┘",
-            ]
+    def _io_instance(self, color: bool = True) -> str:
+        """Instance-level io() - shows actual running streams."""
+        return render_module_io(
+            name=self.__class__.__name__,
+            inputs=self.inputs,
+            outputs=self.outputs,
+            rpcs=self.rpcs,
+            color=color,
+        )
 
-        # can't modify __str__ on a function like we are doing for I/O
-        # so we have a separate repr function here
-        def repr_rpc(fn: Callable) -> str:
-            sig = inspect.signature(fn)
-            # Remove 'self' parameter
-            params = [p for name, p in sig.parameters.items() if name != "self"]
+    @classmethod
+    def _io_class(cls, color: bool = True) -> str:
+        """Class-level io() - shows declared stream types from annotations."""
+        hints = get_type_hints(cls)
 
-            # Format parameters with colored types
-            param_strs = []
-            for param in params:
-                param_str = param.name
-                if param.annotation != inspect.Parameter.empty:
-                    type_name = getattr(param.annotation, "__name__", str(param.annotation))
-                    param_str += ": " + colors.green(type_name)
-                if param.default != inspect.Parameter.empty:
-                    param_str += f" = {param.default}"
-                param_strs.append(param_str)
+        _yellow = colors.yellow if color else (lambda x: x)
+        _green = colors.green if color else (lambda x: x)
 
-            # Format return type
-            return_annotation = ""
-            if sig.return_annotation != inspect.Signature.empty:
-                return_type = getattr(sig.return_annotation, "__name__", str(sig.return_annotation))
-                return_annotation = " -> " + colors.green(return_type)
+        def is_stream(hint: type, stream_type: type) -> bool:
+            origin = get_origin(hint)
+            if origin is stream_type:
+                return True
+            if isinstance(hint, type) and issubclass(hint, stream_type):
+                return True
+            return False
 
-            return (
-                "RPC " + colors.blue(fn.__name__) + f"({', '.join(param_strs)})" + return_annotation
+        def format_stream(name: str, hint: type) -> str:
+            args = get_args(hint)
+            type_name = args[0].__name__ if args else "?"
+            return f"{_yellow(name)}: {_green(type_name)}"
+
+        inputs = {
+            name: format_stream(name, hint) for name, hint in hints.items() if is_stream(hint, In)
+        }
+        outputs = {
+            name: format_stream(name, hint) for name, hint in hints.items() if is_stream(hint, Out)
+        }
+
+        return render_module_io(
+            name=cls.__name__,
+            inputs=inputs,
+            outputs=outputs,
+            rpcs=cls.rpcs,
+            color=color,
+        )
+
+    class _io_descriptor:
+        """Descriptor that makes io() work on both class and instance."""
+
+        def __get__(
+            self, obj: "ModuleBase | None", objtype: type["ModuleBase"]
+        ) -> Callable[[bool], str]:
+            if obj is None:
+                return objtype._io_class
+            return obj._io_instance
+
+    io = _io_descriptor()
+
+    @classmethod
+    def _module_info_class(cls) -> "ModuleInfo":
+        """Class-level module_info() - returns ModuleInfo from annotations."""
+
+        hints = get_type_hints(cls)
+
+        def is_stream(hint: type, stream_type: type) -> bool:
+            origin = get_origin(hint)
+            if origin is stream_type:
+                return True
+            if isinstance(hint, type) and issubclass(hint, stream_type):
+                return True
+            return False
+
+        def format_stream(name: str, hint: type) -> str:
+            args = get_args(hint)
+            type_name = args[0].__name__ if args else "?"
+            return f"{name}: {type_name}"
+
+        inputs = {
+            name: format_stream(name, hint) for name, hint in hints.items() if is_stream(hint, In)
+        }
+        outputs = {
+            name: format_stream(name, hint) for name, hint in hints.items() if is_stream(hint, Out)
+        }
+
+        return extract_module_info(
+            name=cls.__name__,
+            inputs=inputs,
+            outputs=outputs,
+            rpcs=cls.rpcs,
+        )
+
+    class _module_info_descriptor:
+        """Descriptor that makes module_info() work on both class and instance."""
+
+        def __get__(
+            self, obj: "ModuleBase | None", objtype: type["ModuleBase"]
+        ) -> Callable[[], "ModuleInfo"]:
+            if obj is None:
+                return objtype._module_info_class
+            # For instances, extract from actual streams
+            return lambda: extract_module_info(
+                name=obj.__class__.__name__,
+                inputs=obj.inputs,
+                outputs=obj.outputs,
+                rpcs=obj.rpcs,
             )
 
-        ret = [
-            *(f" ├─ {stream}" for stream in self.inputs.values()),
-            *_box(self.__class__.__name__),
-            *(f" ├─ {stream}" for stream in self.outputs.values()),
-            " │",
-            *(f" ├─ {repr_rpc(rpc)}" for rpc in self.rpcs.values()),
-        ]
-
-        return "\n".join(ret)
+    module_info = _module_info_descriptor()
 
     @classproperty
-    def blueprint(self):
+    def blueprint(self):  # type: ignore[no-untyped-def]
         # Here to prevent circular imports.
         from dimos.core.blueprints import create_module_blueprint
 
-        return partial(create_module_blueprint, self)
+        return partial(create_module_blueprint, self)  # type: ignore[arg-type]
+
+    @rpc
+    def get_rpc_method_names(self) -> list[str]:
+        return self.rpc_calls
+
+    @rpc
+    def set_rpc_method(self, method: str, callable: RpcCall) -> None:
+        callable.set_rpc(self.rpc)  # type: ignore[arg-type]
+        self._bound_rpc_calls[method] = callable
+
+    @overload
+    def get_rpc_calls(self, method: str) -> RpcCall: ...
+
+    @overload
+    def get_rpc_calls(self, method1: str, method2: str, *methods: str) -> tuple[RpcCall, ...]: ...
+
+    def get_rpc_calls(self, *methods: str) -> RpcCall | tuple[RpcCall, ...]:  # type: ignore[misc]
+        missing = [m for m in methods if m not in self._bound_rpc_calls]
+        if missing:
+            raise ValueError(
+                f"RPC methods not found. Class: {self.__class__.__name__}, RPC methods: {', '.join(missing)}"
+            )
+        result = tuple(self._bound_rpc_calls[m] for m in methods)
+        return result[0] if len(result) == 1 else result
 
 
-class DaskModule(ModuleBase):
+class DaskModule(ModuleBase[ModuleConfigT]):
     ref: Actor
     worker: int
 
-    def __init__(self, *args, **kwargs) -> None:
-        self.ref = None
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Set class-level None attributes for In/Out type annotations.
+
+        This is needed because Dask's Actor proxy looks up attributes on the class
+        (not instance) when proxying attribute access. Without class-level attributes,
+        the proxy would fail with AttributeError even though the instance has the attrs.
+        """
+        super().__init_subclass__(**kwargs)
+
+        # Get type hints for this class only (not inherited ones).
+        globalns = {}
+        for c in cls.__mro__:
+            if c.__module__ in sys.modules:
+                globalns.update(sys.modules[c.__module__].__dict__)
+
+        try:
+            hints = get_type_hints(cls, globalns=globalns, include_extras=True)
+        except (NameError, AttributeError, TypeError):
+            hints = {}
+
+        for name, ann in hints.items():
+            origin = get_origin(ann)
+            if origin in (In, Out):
+                # Set class-level attribute if not already set.
+                if not hasattr(cls, name) or getattr(cls, name) is None:
+                    setattr(cls, name, None)
+
+    def __init__(self, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
+        self.ref = None  # type: ignore[assignment]
 
         # Get type hints with proper namespace resolution for subclasses
         # Collect namespaces from all classes in the MRO chain
@@ -273,25 +409,25 @@ class DaskModule(ModuleBase):
             origin = get_origin(ann)
             if origin is Out:
                 inner, *_ = get_args(ann) or (Any,)
-                stream = Out(inner, name, self)
+                stream = Out(inner, name, self)  # type: ignore[var-annotated]
                 setattr(self, name, stream)
             elif origin is In:
                 inner, *_ = get_args(ann) or (Any,)
-                stream = In(inner, name, self)
+                stream = In(inner, name, self)  # type: ignore[assignment]
                 setattr(self, name, stream)
         super().__init__(*args, **kwargs)
 
-    def set_ref(self, ref) -> int:
+    def set_ref(self, ref) -> int:  # type: ignore[no-untyped-def]
         worker = get_worker()
         self.ref = ref
         self.worker = worker.name
-        return worker.name
+        return worker.name  # type: ignore[no-any-return]
 
     def __str__(self) -> str:
         return f"{self.__class__.__name__}"
 
-    # called from remote
-    def set_transport(self, stream_name: str, transport: Transport) -> bool:
+    @rpc
+    def set_transport(self, stream_name: str, transport: Transport) -> bool:  # type: ignore[type-arg]
         stream = getattr(self, stream_name, None)
         if not stream:
             raise ValueError(f"{stream_name} not found in {self.__class__.__name__}")
@@ -303,7 +439,7 @@ class DaskModule(ModuleBase):
         return True
 
     # called from remote
-    def connect_stream(self, input_name: str, remote_stream: RemoteOut[T]):
+    def connect_stream(self, input_name: str, remote_stream: RemoteOut[T]):  # type: ignore[no-untyped-def]
         input_stream = getattr(self, input_name, None)
         if not input_stream:
             raise ValueError(f"{input_name} not found in {self.__class__.__name__}")

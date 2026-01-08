@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,9 +27,10 @@ from dimos_lcm.nav_msgs import Path as LCMPath
 from dimos_lcm.std_msgs import Header as LCMHeader, Time as LCMTime
 
 try:
-    from nav_msgs.msg import Path as ROSPath
+    from nav_msgs.msg import Path as ROSPath  # type: ignore[attr-defined]
 except ImportError:
-    ROSPath = None
+    ROSPath = None  # type: ignore[assignment, misc]
+import rerun as rr
 
 from dimos.msgs.geometry_msgs.PoseStamped import PoseStamped
 from dimos.types.timestamped import Timestamped
@@ -38,7 +39,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
 
-def sec_nsec(ts):
+def sec_nsec(ts):  # type: ignore[no-untyped-def]
     s = int(ts)
     return [s, int((ts - s) * 1_000_000_000)]
 
@@ -49,7 +50,7 @@ class Path(Timestamped):
     frame_id: str
     poses: list[PoseStamped]
 
-    def __init__(
+    def __init__(  # type: ignore[no-untyped-def]
         self,
         ts: float = 0.0,
         frame_id: str = "world",
@@ -116,16 +117,16 @@ class Path(Timestamped):
             lcm_pose.header.stamp = LCMTime()
 
             # Set the header with pose timestamp but path's frame_id
-            [lcm_pose.header.stamp.sec, lcm_pose.header.stamp.nsec] = sec_nsec(pose.ts)
+            [lcm_pose.header.stamp.sec, lcm_pose.header.stamp.nsec] = sec_nsec(pose.ts)  # type: ignore[no-untyped-call]
             lcm_pose.header.frame_id = self.frame_id  # All poses use path's frame_id
             lcm_poses.append(lcm_pose)
         lcm_msg.poses = lcm_poses
 
         # Set header with path's own timestamp
-        [lcm_msg.header.stamp.sec, lcm_msg.header.stamp.nsec] = sec_nsec(self.ts)
+        [lcm_msg.header.stamp.sec, lcm_msg.header.stamp.nsec] = sec_nsec(self.ts)  # type: ignore[no-untyped-call]
         lcm_msg.header.frame_id = self.frame_id
 
-        return lcm_msg.lcm_encode()
+        return lcm_msg.lcm_encode()  # type: ignore[no-any-return]
 
     @classmethod
     def lcm_decode(cls, data: bytes | BinaryIO) -> Path:
@@ -167,7 +168,7 @@ class Path(Timestamped):
         """Allow indexing and slicing of poses."""
         return self.poses[index]
 
-    def __iter__(self) -> Iterator:
+    def __iter__(self) -> Iterator:  # type: ignore[type-arg]
         """Allow iteration over poses."""
         return iter(self.poses)
 
@@ -219,7 +220,7 @@ class Path(Timestamped):
             ROS Path message
         """
 
-        ros_msg = ROSPath()
+        ros_msg = ROSPath()  # type: ignore[no-untyped-call]
 
         # Set header
         ros_msg.header.frame_id = self.frame_id
@@ -231,3 +232,26 @@ class Path(Timestamped):
             ros_msg.poses.append(pose.to_ros_msg())
 
         return ros_msg
+
+    def to_rerun(  # type: ignore[no-untyped-def]
+        self,
+        color: tuple[int, int, int] = (0, 255, 128),
+        z_offset: float = 0.2,
+        radii: float = 0.05,
+    ):
+        """Convert to rerun LineStrips3D format.
+
+        Args:
+            color: RGB color tuple for the path line
+            z_offset: Height above floor to render path (default 0.2m to avoid costmap occlusion)
+            radii: Thickness of the path line (default 0.05m = 5cm)
+
+        Returns:
+            rr.LineStrips3D archetype for logging to rerun
+        """
+        if not self.poses:
+            return rr.LineStrips3D([])
+
+        # Lift path above floor so it's visible over costmap
+        points = [[p.x, p.y, p.z + z_offset] for p in self.poses]
+        return rr.LineStrips3D([points], colors=[color], radii=radii)

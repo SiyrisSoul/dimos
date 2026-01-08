@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ def mobileclip_model():
 
     model_path = get_data("models_mobileclip") / "mobileclip2_s0.pt"
     model = MobileCLIPModel(model_name="MobileCLIP2-S0", model_path=model_path)
-    model.warmup()
+    model.start()
     return model
 
 

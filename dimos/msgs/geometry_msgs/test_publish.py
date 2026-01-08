@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -47,7 +47,7 @@ def test_receive() -> None:
                 lc.handle()
                 # loop 10000 times
                 for _ in range(10000000):
-                    3 + 3
+                    3 + 3  # noqa: B018
             except Exception as e:
                 print(f"Error in LCM handling: {e}")
 

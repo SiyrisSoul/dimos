@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,11 +16,22 @@ from collections.abc import Callable
 from functools import wraps
 import threading
 import time
+from typing import Any, Protocol, TypeVar
 
 from .accumulators import Accumulator, LatestAccumulator
 
+_CacheResult_co = TypeVar("_CacheResult_co", covariant=True)
+_CacheReturn = TypeVar("_CacheReturn")
 
-def limit(max_freq: float, accumulator: Accumulator | None = None):
+
+class CachedMethod(Protocol[_CacheResult_co]):
+    """Protocol for methods decorated with simple_mcache."""
+
+    def __call__(self) -> _CacheResult_co: ...
+    def invalidate_cache(self, instance: Any) -> None: ...
+
+
+def limit(max_freq: float, accumulator: Accumulator | None = None):  # type: ignore[no-untyped-def, type-arg]
     """
     Decorator that limits function call frequency.
 
@@ -43,7 +54,7 @@ def limit(max_freq: float, accumulator: Accumulator | None = None):
     if accumulator is None:
         accumulator = LatestAccumulator()
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable) -> Callable:  # type: ignore[type-arg]
         last_call_time = 0.0
         lock = threading.Lock()
         timer: threading.Timer | None = None
@@ -52,13 +63,13 @@ def limit(max_freq: float, accumulator: Accumulator | None = None):
             nonlocal last_call_time, timer
             with lock:
                 if len(accumulator):
-                    acc_args, acc_kwargs = accumulator.get()
+                    acc_args, acc_kwargs = accumulator.get()  # type: ignore[misc]
                     last_call_time = time.time()
                     timer = None
                     func(*acc_args, **acc_kwargs)
 
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args, **kwargs):  # type: ignore[no-untyped-def]
             nonlocal last_call_time, timer
             current_time = time.time()
 
@@ -77,7 +88,7 @@ def limit(max_freq: float, accumulator: Accumulator | None = None):
                     # if we have accumulated data, we get a compound value
                     if len(accumulator):
                         accumulator.add(*args, **kwargs)
-                        acc_args, acc_kwargs = accumulator.get()  # accumulator resets here
+                        acc_args, acc_kwargs = accumulator.get()  # type: ignore[misc]  # accumulator resets here
                         return func(*acc_args, **acc_kwargs)
 
                     # No accumulated data, normal call
@@ -102,7 +113,7 @@ def limit(max_freq: float, accumulator: Accumulator | None = None):
     return decorator
 
 
-def simple_mcache(method: Callable) -> Callable:
+def simple_mcache(method: Callable) -> Callable:  # type: ignore[type-arg]
     """
     Decorator to cache the result of a method call on the instance.
 
@@ -124,11 +135,9 @@ def simple_mcache(method: Callable) -> Callable:
     lock_name = f"_lock_{method.__name__}"
 
     @wraps(method)
-    def getter(self):
+    def getter(self):  # type: ignore[no-untyped-def]
         # Get or create the lock for this instance
         if not hasattr(self, lock_name):
-            # This is a one-time operation, race condition here is acceptable
-            # as worst case we create multiple locks but only one gets stored
             setattr(self, lock_name, threading.Lock())
 
         lock = getattr(self, lock_name)
@@ -142,10 +151,22 @@ def simple_mcache(method: Callable) -> Callable:
                 setattr(self, attr_name, method(self))
             return getattr(self, attr_name)
 
+    def invalidate_cache(instance: Any) -> None:
+        """Clear the cached value for the given instance."""
+        if not hasattr(instance, lock_name):
+            return
+
+        lock = getattr(instance, lock_name)
+        with lock:
+            if hasattr(instance, attr_name):
+                delattr(instance, attr_name)
+
+    getter.invalidate_cache = invalidate_cache  # type: ignore[attr-defined]
+
     return getter
 
 
-def retry(max_retries: int = 3, on_exception: type[Exception] = Exception, delay: float = 0.0):
+def retry(max_retries: int = 3, on_exception: type[Exception] = Exception, delay: float = 0.0):  # type: ignore[no-untyped-def]
     """
     Decorator that retries a function call if it raises an exception.
 
@@ -173,9 +194,9 @@ def retry(max_retries: int = 3, on_exception: type[Exception] = Exception, delay
     if delay < 0:
         raise ValueError("delay must be non-negative")
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable) -> Callable:  # type: ignore[type-arg]
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args, **kwargs):  # type: ignore[no-untyped-def]
             last_exception = None
 
             for attempt in range(max_retries + 1):

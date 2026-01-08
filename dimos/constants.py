@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,6 +15,8 @@
 from pathlib import Path
 
 DIMOS_PROJECT_ROOT = Path(__file__).parent.parent
+
+DIMOS_LOG_DIR = DIMOS_PROJECT_ROOT / "logs"
 
 """
 Constants for shared memory

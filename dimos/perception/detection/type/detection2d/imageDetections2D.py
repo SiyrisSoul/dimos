@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +14,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Generic
+
+from typing_extensions import TypeVar
 
 from dimos.perception.detection.type.detection2d.base import Detection2D
 from dimos.perception.detection.type.detection2d.bbox import Detection2DBBox
@@ -22,29 +24,32 @@ from dimos.perception.detection.type.imageDetections import ImageDetections
 
 if TYPE_CHECKING:
     from dimos_lcm.vision_msgs import Detection2DArray
-    from ultralytics.engine.results import Results
+    from ultralytics.engine.results import Results  # type: ignore[import-not-found]
 
     from dimos.msgs.sensor_msgs import Image
 
+# TypeVar with default - Detection2DBBox is the default when no type param given
+T2D = TypeVar("T2D", bound=Detection2D, default=Detection2DBBox)
 
-class ImageDetections2D(ImageDetections[Detection2D]):
+
+class ImageDetections2D(ImageDetections[T2D], Generic[T2D]):
     @classmethod
-    def from_ros_detection2d_array(
+    def from_ros_detection2d_array(  # type: ignore[no-untyped-def]
         cls, image: Image, ros_detections: Detection2DArray, **kwargs
-    ) -> ImageDetections2D:
+    ) -> ImageDetections2D[Detection2DBBox]:
         """Convert from ROS Detection2DArray message to ImageDetections2D object."""
-        detections: list[Detection2D] = []
+        detections: list[Detection2DBBox] = []
         for ros_det in ros_detections.detections:
             detection = Detection2DBBox.from_ros_detection2d(ros_det, image=image, **kwargs)
-            if detection.is_valid():  # type: ignore[attr-defined]
+            if detection.is_valid():
                 detections.append(detection)
 
-        return cls(image=image, detections=detections)
+        return ImageDetections2D(image=image, detections=detections)
 
     @classmethod
-    def from_ultralytics_result(
+    def from_ultralytics_result(  # type: ignore[no-untyped-def]
         cls, image: Image, results: list[Results], **kwargs
-    ) -> ImageDetections2D:
+    ) -> ImageDetections2D[Detection2DBBox]:
         """Create ImageDetections2D from ultralytics Results.
 
         Dispatches to appropriate Detection2D subclass based on result type:
@@ -61,14 +66,14 @@ class ImageDetections2D(ImageDetections[Detection2D]):
         """
         from dimos.perception.detection.type.detection2d.person import Detection2DPerson
 
-        detections: list[Detection2D] = []
+        detections: list[Detection2DBBox] = []
         for result in results:
             if result.boxes is None:
                 continue
 
             num_detections = len(result.boxes.xyxy)
             for i in range(num_detections):
-                detection: Detection2D
+                detection: Detection2DBBox
                 if result.keypoints is not None:
                     # Pose detection with keypoints
                     detection = Detection2DPerson.from_ultralytics_result(result, i, image)
@@ -78,4 +83,4 @@ class ImageDetections2D(ImageDetections[Detection2D]):
                 if detection.is_valid():
                     detections.append(detection)
 
-        return cls(image=image, detections=detections)
+        return ImageDetections2D(image=image, detections=detections)

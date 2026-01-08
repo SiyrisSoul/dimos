@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@ import inspect
 from typing import Union, get_args, get_origin
 
 
-def python_type_to_json_schema(python_type) -> dict:
+def python_type_to_json_schema(python_type) -> dict:  # type: ignore[no-untyped-def, type-arg]
     """Convert Python type annotations to JSON Schema format."""
     # Handle None/NoneType
     if python_type is type(None) or python_type is None:
@@ -60,7 +60,7 @@ def python_type_to_json_schema(python_type) -> dict:
     return type_map.get(python_type, {"type": "string"})
 
 
-def function_to_schema(func) -> dict:
+def function_to_schema(func) -> dict:  # type: ignore[no-untyped-def, type-arg]
     """Convert a function to OpenAI function schema format."""
     try:
         signature = inspect.signature(func)

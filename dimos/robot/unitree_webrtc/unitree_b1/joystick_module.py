@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 
 """Pygame Joystick Module for testing B1 control via LCM."""
 
@@ -37,10 +37,10 @@ class JoystickModule(Module):
     This allows testing the same interface that navigation will use.
     """
 
-    twist_out: Out[TwistStamped] = None  # Timestamped velocity commands
-    mode_out: Out[Int32] = None  # Mode changes
+    twist_out: Out[TwistStamped]  # Timestamped velocity commands
+    mode_out: Out[Int32]  # Mode changes
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
         Module.__init__(self, *args, **kwargs)
         self.pygame_ready = False
         self.running = False
@@ -58,7 +58,7 @@ class JoystickModule(Module):
             print("ERROR: pygame not installed. Install with: pip install pygame")
             return False
 
-        self.keys_held = set()
+        self.keys_held = set()  # type: ignore[var-annotated]
         self.pygame_ready = True
         self.running = True
 
@@ -224,7 +224,7 @@ class JoystickModule(Module):
         pygame.quit()
         print("JoystickModule stopped")
 
-    def _update_display(self, twist) -> None:
+    def _update_display(self, twist) -> None:  # type: ignore[no-untyped-def]
         """Update pygame window with current status."""
         import pygame
 

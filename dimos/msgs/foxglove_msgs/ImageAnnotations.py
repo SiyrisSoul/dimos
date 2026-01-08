@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,22 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dimos_lcm.foxglove_msgs.ImageAnnotations import ImageAnnotations as FoxgloveImageAnnotations
+from dimos_lcm.foxglove_msgs.ImageAnnotations import (
+    ImageAnnotations as FoxgloveImageAnnotations,
+)
 
 
-class ImageAnnotations(FoxgloveImageAnnotations):
+class ImageAnnotations(FoxgloveImageAnnotations):  # type: ignore[misc]
     def __add__(self, other: "ImageAnnotations") -> "ImageAnnotations":
         points = self.points + other.points
         texts = self.texts + other.texts
+        circles = self.circles + other.circles
 
         return ImageAnnotations(
             texts=texts,
             texts_length=len(texts),
             points=points,
             points_length=len(points),
+            circles=circles,
+            circles_length=len(circles),
         )
 
     def agent_encode(self) -> str:
         if len(self.texts) == 0:
-            return None
-        return list(map(lambda t: t.text, self.texts))
+            return None  # type: ignore[return-value]
+        return list(map(lambda t: t.text, self.texts))  # type: ignore[return-value]

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 
 """Internal B1 command structure for UDP communication."""
 
@@ -39,7 +39,7 @@ class B1Command(BaseModel):
     )  # Control mode (uint8): 0=idle, 1=stand, 2=walk, 6=recovery
 
     @classmethod
-    def from_twist(cls, twist, mode: int = 2):
+    def from_twist(cls, twist, mode: int = 2):  # type: ignore[no-untyped-def]
         """Create B1Command from standard ROS Twist message.
 
         This is the key integration point for navigation and planning.

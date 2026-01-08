@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -38,17 +38,17 @@ class Config(ModuleConfig):
 class ReidModule(Module):
     default_config = Config
 
-    detections: In[Detection2DArray] = None  # type: ignore
-    image: In[Image] = None  # type: ignore
-    annotations: Out[ImageAnnotations] = None  # type: ignore
+    detections: In[Detection2DArray]
+    image: In[Image]
+    annotations: Out[ImageAnnotations]
 
-    def __init__(self, idsystem: IDSystem | None = None, **kwargs) -> None:
+    def __init__(self, idsystem: IDSystem | None = None, **kwargs) -> None:  # type: ignore[no-untyped-def]
         super().__init__(**kwargs)
         if idsystem is None:
             try:
                 from dimos.models.embedding import TorchReIDModel
 
-                idsystem = EmbeddingIDSystem(model=TorchReIDModel, padding=0)
+                idsystem = EmbeddingIDSystem(model=TorchReIDModel, padding=0)  # type: ignore[arg-type]
             except Exception as e:
                 raise RuntimeError(
                     "TorchReIDModel not available. Please install with: pip install dimos[torchreid]"

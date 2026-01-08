@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,8 +13,8 @@
 # limitations under the License.
 
 from abc import abstractmethod
+from collections.abc import Callable
 
-from dimos_lcm.foxglove_msgs.ImageAnnotations import PointsAnnotation, TextAnnotation
 from dimos_lcm.vision_msgs import Detection2D as ROSDetection2D
 
 from dimos.msgs.foxglove_msgs import ImageAnnotations
@@ -36,16 +36,14 @@ class Detection2D(Timestamped):
         ...
 
     @abstractmethod
-    def to_text_annotation(self) -> list[TextAnnotation]:
-        """Return text annotations for visualization."""
-        ...
-
-    @abstractmethod
-    def to_points_annotation(self) -> list[PointsAnnotation]:
-        """Return points/shape annotations for visualization."""
-        ...
-
-    @abstractmethod
     def to_ros_detection2d(self) -> ROSDetection2D:
         """Convert detection to ROS Detection2D message."""
         ...
+
+    @abstractmethod
+    def is_valid(self) -> bool:
+        """Check if the detection is valid."""
+        ...
+
+
+Filter2D = Callable[[Detection2D], bool]

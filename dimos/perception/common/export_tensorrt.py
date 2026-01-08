@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,10 +14,10 @@
 
 import argparse
 
-from ultralytics import YOLO, FastSAM
+from ultralytics import YOLO, FastSAM  # type: ignore[attr-defined, import-not-found]
 
 
-def parse_args():
+def parse_args():  # type: ignore[no-untyped-def]
     parser = argparse.ArgumentParser(description="Export YOLO/FastSAM models to different formats")
     parser.add_argument("--model_path", type=str, required=True, help="Path to the model weights")
     parser.add_argument(
@@ -41,12 +41,12 @@ def parse_args():
 
 
 def main() -> None:
-    args = parse_args()
+    args = parse_args()  # type: ignore[no-untyped-call]
     half = args.precision == "fp16"
     int8 = args.precision == "int8"
     # Load the appropriate model
     if args.model_type == "yolo":
-        model = YOLO(args.model_path)
+        model: YOLO | FastSAM = YOLO(args.model_path)
     else:
         model = FastSAM(args.model_path)
 

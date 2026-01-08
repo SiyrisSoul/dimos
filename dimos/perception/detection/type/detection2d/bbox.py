@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,8 +18,10 @@ from dataclasses import dataclass
 import hashlib
 from typing import TYPE_CHECKING, Any
 
+from typing_extensions import Self
+
 if TYPE_CHECKING:
-    from ultralytics.engine.results import Results
+    from ultralytics.engine.results import Results  # type: ignore[import-not-found]
 
     from dimos.msgs.sensor_msgs import Image
 
@@ -100,9 +102,9 @@ class Detection2DBBox(Detection2D):
     def center_to_3d(
         self,
         pixel: tuple[int, int],
-        camera_info: CameraInfo,
+        camera_info: CameraInfo,  # type: ignore[name-defined]
         assumed_depth: float = 1.0,
-    ) -> PoseStamped:
+    ) -> PoseStamped:  # type: ignore[name-defined]
         """Unproject 2D pixel coordinates to 3D position in camera optical frame.
 
         Args:
@@ -122,7 +124,7 @@ class Detection2DBBox(Detection2D):
 
         # Create 3D point at assumed depth in camera optical frame
         # Camera optical frame: X right, Y down, Z forward
-        return Vector3(x_norm * assumed_depth, y_norm * assumed_depth, assumed_depth)
+        return Vector3(x_norm * assumed_depth, y_norm * assumed_depth, assumed_depth)  # type: ignore[name-defined]
 
     # return focused image, only on the bbox
     def cropped_image(self, padding: int = 20) -> Image:
@@ -269,7 +271,7 @@ class Detection2DBBox(Detection2D):
             size_y=height,
         )
 
-    def lcm_encode(self):
+    def lcm_encode(self):  # type: ignore[no-untyped-def]
         return self.to_image_annotations().lcm_encode()
 
     def to_text_annotation(self) -> list[TextAnnotation]:
@@ -349,7 +351,7 @@ class Detection2DBBox(Detection2D):
         )
 
     @classmethod
-    def from_ros_detection2d(cls, ros_det: ROSDetection2D, **kwargs) -> Detection2D:
+    def from_ros_detection2d(cls, ros_det: ROSDetection2D, **kwargs) -> Self:  # type: ignore[no-untyped-def]
         """Convert from ROS Detection2D message to Detection2D object."""
         # Extract bbox from ROS format
         center_x = ros_det.bbox.center.position.x

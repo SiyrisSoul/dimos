@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,34 +15,61 @@
 import asyncio
 import logging
 import threading
+from typing import TYPE_CHECKING, Any
 
-# this is missing, I'm just trying to import lcm_foxglove_bridge.py from dimos_lcm
-from dimos_lcm.foxglove_bridge import FoxgloveBridge as LCMFoxgloveBridge
+from dimos_lcm.foxglove_bridge import (
+    FoxgloveBridge as LCMFoxgloveBridge,
+)
 
-from dimos.core import Module, rpc
+from dimos.core import DimosCluster, Module, rpc
+from dimos.utils.logging_config import setup_logger
+
+if TYPE_CHECKING:
+    from dimos.core.global_config import GlobalConfig
+
+logging.getLogger("lcm_foxglove_bridge").setLevel(logging.ERROR)
+logging.getLogger("FoxgloveServer").setLevel(logging.ERROR)
+
+logger = setup_logger()
 
 
 class FoxgloveBridge(Module):
     _thread: threading.Thread
     _loop: asyncio.AbstractEventLoop
+    _global_config: "GlobalConfig | None" = None
 
-    def __init__(self, *args, shm_channels=None, jpeg_shm_channels=None, **kwargs) -> None:
+    def __init__(
+        self,
+        *args: Any,
+        shm_channels: list[str] | None = None,
+        jpeg_shm_channels: list[str] | None = None,
+        global_config: "GlobalConfig | None" = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(*args, **kwargs)
         self.shm_channels = shm_channels or []
         self.jpeg_shm_channels = jpeg_shm_channels or []
+        self._global_config = global_config
 
     @rpc
     def start(self) -> None:
         super().start()
+
+        # Skip if Rerun is the selected viewer backend
+        if self._global_config and self._global_config.viewer_backend.startswith("rerun"):
+            logger.info(
+                "Foxglove bridge skipped", viewer_backend=self._global_config.viewer_backend
+            )
+            return
 
         def run_bridge() -> None:
             self._loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self._loop)
             try:
                 for logger in ["lcm_foxglove_bridge", "FoxgloveServer"]:
-                    logger = logging.getLogger(logger)
-                    logger.setLevel(logging.ERROR)
-                    for handler in logger.handlers:
+                    logger = logging.getLogger(logger)  # type: ignore[assignment]
+                    logger.setLevel(logging.ERROR)  # type: ignore[attr-defined]
+                    for handler in logger.handlers:  # type: ignore[attr-defined]
                         handler.setLevel(logging.ERROR)
 
                 bridge = LCMFoxgloveBridge(
@@ -69,7 +96,25 @@ class FoxgloveBridge(Module):
         super().stop()
 
 
+def deploy(
+    dimos: DimosCluster,
+    shm_channels: list[str] | None = None,
+) -> FoxgloveBridge:
+    if shm_channels is None:
+        shm_channels = [
+            "/image#sensor_msgs.Image",
+            "/lidar#sensor_msgs.PointCloud2",
+            "/map#sensor_msgs.PointCloud2",
+        ]
+    foxglove_bridge = dimos.deploy(  # type: ignore[attr-defined]
+        FoxgloveBridge,
+        shm_channels=shm_channels,
+    )
+    foxglove_bridge.start()
+    return foxglove_bridge  # type: ignore[no-any-return]
+
+
 foxglove_bridge = FoxgloveBridge.blueprint
 
 
-__all__ = ["FoxgloveBridge", "foxglove_bridge"]
+__all__ = ["FoxgloveBridge", "deploy", "foxglove_bridge"]

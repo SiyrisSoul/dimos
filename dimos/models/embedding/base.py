@@ -1,4 +1,4 @@
-# Copyright 2025 Dimensional Inc.
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,16 +15,32 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 import time
-from typing import TYPE_CHECKING, Generic, Optional, TypeVar
+from typing import TYPE_CHECKING, Generic, TypeVar
 
 import numpy as np
 import torch
 
+from dimos.models.base import HuggingFaceModelConfig, LocalModelConfig
 from dimos.types.timestamped import Timestamped
 
 if TYPE_CHECKING:
     from dimos.msgs.sensor_msgs import Image
+
+
+@dataclass
+class EmbeddingModelConfig(LocalModelConfig):
+    """Base config for embedding models."""
+
+    normalize: bool = True
+
+
+@dataclass
+class HuggingFaceEmbeddingModelConfig(HuggingFaceModelConfig):
+    """Base config for HuggingFace-based embedding models."""
+
+    normalize: bool = True
 
 
 class Embedding(Timestamped):
@@ -34,9 +50,9 @@ class Embedding(Timestamped):
     Embeddings are kept as torch.Tensor on device by default for efficiency.
     """
 
-    vector: torch.Tensor | np.ndarray
+    vector: torch.Tensor | np.ndarray  # type: ignore[type-arg]
 
-    def __init__(self, vector: torch.Tensor | np.ndarray, timestamp: float | None = None) -> None:
+    def __init__(self, vector: torch.Tensor | np.ndarray, timestamp: float | None = None) -> None:  # type: ignore[type-arg]
         self.vector = vector
         if timestamp:
             self.timestamp = timestamp
@@ -51,7 +67,7 @@ class Embedding(Timestamped):
             return result.item()
         return float(self.vector @ other.to_numpy())
 
-    def to_numpy(self) -> np.ndarray:
+    def to_numpy(self) -> np.ndarray:  # type: ignore[type-arg]
         """Convert to numpy array (moves to CPU if needed)."""
         if isinstance(self.vector, torch.Tensor):
             return self.vector.detach().cpu().numpy()
@@ -81,7 +97,6 @@ class EmbeddingModel(ABC, Generic[E]):
     """Abstract base class for embedding models supporting vision and language."""
 
     device: str
-    normalize: bool = True
 
     @abstractmethod
     def embed(self, *images: Image) -> E | list[E]:
