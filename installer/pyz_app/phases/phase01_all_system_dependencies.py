@@ -67,6 +67,9 @@ def phase1(system_analysis, selected_features) -> str | None:
             "Install these system dependencies for you via apt-get? (NOTE: sudo may prompt for a password)"
         )
         if install_deps:
+            print("- installing/checking:")
+            for each in deps["apt_deps"]:
+                print(f"  • {p.highlight(each)}")
             p.boring_log("- this may take a few minutes...")
             try:
                 apt_install(deps["apt_deps"])
@@ -93,6 +96,9 @@ def phase1(system_analysis, selected_features) -> str | None:
             )
             exit(1)
         if p.ask_yes_no("Install these system dependencies for you via Homebrew?"):
+            print("- installing/checking:")
+            for each in deps["brew_deps"]:
+                print(f"  • {p.highlight(each)}")
             try:
                 dependencies = deps["brew_deps"]
                 brew_install(dependencies)
