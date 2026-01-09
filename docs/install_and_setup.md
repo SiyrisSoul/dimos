@@ -50,6 +50,8 @@ uv pip install dimos
 
 Dimos can be installed with optional features to enable additional functionality.
 
+<!-- TODO: mention Isaac Sim, Cuda extra steps, ROS, and talk about ENV vars for each option (like mujoco and rerun) -->
+
 - ### Visualization:
     - Add feature with: `uv pip install dimos[visualization]`
     - prerequisites:
@@ -83,6 +85,16 @@ Dimos can be installed with optional features to enable additional functionality
                 brew install libxslt
                 ```
     
+    <!-- - Streaming setup (Ubuntu 22.04 recommended):
+        - NVIDIA driver 535+ installed (`nvidia-smi` to verify)
+        - CUDA toolkit: `sudo apt install -y nvidia-cuda-toolkit`
+        - NVIDIA Container Toolkit (runtime config + `docker run --rm --runtime=nvidia --gpus all ubuntu nvidia-smi` validation)
+        - Pull images as needed, e.g. `sudo docker pull nvcr.io/nvidia/isaac-sim:4.2.0`
+        - To run streaming examples:
+            - `cd docker/simulation`
+            - Isaac: `docker compose -f isaac/docker-compose.yml build && docker compose -f isaac/docker-compose.yml up`
+            - Genesis: `docker compose -f genesis/docker-compose.yml build && docker compose -f genesis/docker-compose.yml up`
+        - RTSP stream available at `rtsp://localhost:8554/stream` (view in VLC or RTSP-capable player) -->
 
 - ### Agents:
     - Add feature with: `uv pip install dimos[agents]`
