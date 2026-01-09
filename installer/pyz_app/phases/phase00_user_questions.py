@@ -124,9 +124,7 @@ def phase0(cli_features: list[str] | None = None) -> tuple[dict[str, object], li
     env_path = f"{project_dir}/.env"
     envrc_path = f"{project_dir}/.envrc"
     envrc_path_obj = Path(envrc_path)
-    has_dotenv = setup_dotenv(project_dir, env_path)
-    if not has_dotenv:
-        return
+    setup_dotenv(project_dir, env_path)
 
     setup_direnv(envrc_path)
 
