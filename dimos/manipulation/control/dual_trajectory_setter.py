@@ -441,7 +441,7 @@ def interactive_mode(setter: DualTrajectorySetter) -> None:
 
             elif cmd == "vel" and len(parts) >= 3:
                 arm_name = parts[1].lower()
-                a = (
+                a: ArmState | None = (
                     left
                     if arm_name in ("left", "l")
                     else right
