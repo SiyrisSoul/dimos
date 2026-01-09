@@ -31,7 +31,7 @@
           { vals.pkg=pkgs.cctools;            flags={}; onlyIf=pkgs.stdenv.isDarwin; } # for pip install opencv-python
           { vals.pkg=pkgs.pcre2;              flags={ ldLibraryGroup=pkgs.stdenv.isDarwin; packageConfGroup=pkgs.stdenv.isDarwin; }; }
           { vals.pkg=pkgs.libsysprof-capture; flags.packageConfGroup=true; onlyIf=pkgs.stdenv.isDarwin; }
-          { vals.pkg=pkgs.xcbuild;            flags={}; }
+          { vals.pkg=pkgs.xcbuild;            flags={}; onlyIf=pkgs.stdenv.isDarwin; }
           { vals.pkg=pkgs.git-lfs;            flags={}; }
           { vals.pkg=pkgs.gnugrep;            flags={}; }
           { vals.pkg=pkgs.gnused;             flags={}; }
@@ -190,11 +190,14 @@
             strAppend="/lib/python3.${aggregation.mergedVals.pythonMinorVersion}/site-packages";
             strJoin=":";
         });
+        groups = {
+            inherit ldLibraryPackages giTypelibPackagesString packageConfPackagesString manualPythonPackages;
+        };
 
         # ------------------------------------------------------------
         # 3. Host interactive shell  →  `nix develop`
         # ------------------------------------------------------------
-        shellHook = ''
+        envVarsShellHook = ''
           shopt -s nullglob 2>/dev/null || setopt +o nomatch 2>/dev/null || true # allow globs to be empty without throwing an error
           if [ "$OSTYPE" = "linux-gnu" ]; then
             export CC="cc-no-usr-include" # basically patching for nix
@@ -214,6 +217,9 @@
           # CC, CFLAGS, and LDFLAGS are bascially all for `pip install pyaudio`
           export CFLAGS="$(pkg-config --cflags portaudio-2.0) $CFLAGS"
           export LDFLAGS="-L$(pkg-config --variable=libdir portaudio-2.0) $LDFLAGS"
+        '';
+        shellHook = ''
+          ${envVarsShellHook}
 
           # without this alias, the pytest uses the non-venv python and fails
           alias pytest="python -m pytest"
@@ -293,6 +299,14 @@
         };
 
       in {
+        # for re-use in other flakes
+        vars = {
+            inherit devPackages groups aggregation lib;
+            # what other flakes will use
+            shellHook = envVarsShellHook;
+            # what someone would use if they weren't really managing their own project
+            fullShell = shellHook;
+        };
         ## Local dev shell
         devShells = devShells;
 
