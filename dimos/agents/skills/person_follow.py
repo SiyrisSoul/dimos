@@ -255,7 +255,9 @@ class PersonFollowSkillContainer(SkillModule):
                 continue
 
             # Track person in current frame using EdgeTAM
-            logger.info(f"Image size: {self._latest_image.width}x{self._latest_image.height}, frame_count: {self._tracker.frame_count}")
+            logger.info(
+                f"Image size: {self._latest_image.width}x{self._latest_image.height}, frame_count: {self._tracker.frame_count}"
+            )
             start = time.perf_counter()
             detections = self._tracker.process_image(self._latest_image)  # type: ignore[union-attr]
             end = time.perf_counter()
