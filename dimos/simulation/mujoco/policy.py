@@ -21,9 +21,12 @@ from typing import Any
 
 import mujoco
 import numpy as np
-import onnxruntime as rt  # type: ignore[import-untyped]
+import onnxruntime as ort  # type: ignore[import-untyped]
 
 from dimos.simulation.mujoco.input_controller import InputController
+from dimos.utils.logging_config import setup_logger
+
+logger = setup_logger()
 
 _MUJOCO_PROFILER_ENABLED = False
 _MUJOCO_PROF: dict[str, float | int] = {
@@ -72,9 +75,11 @@ class OnnxController(ABC):
         ctrl_dt: float | None = None,
         drift_compensation: list[float] | None = None,
     ) -> None:
-        self._policy = rt.InferenceSession(policy_path, providers=["CPUExecutionProvider"])
-        # Support multiple exporter conventions. Prefer RSL-RL/IsaacLab default "actions",
-        # but keep compatibility with older exports using "continuous_actions".
+        # Load policy. Prefer available providers (CPU-only by default, GPU if installed).
+        self._policy = ort.InferenceSession(policy_path, providers=ort.get_available_providers())
+
+        # Support multiple exporter conventions. Prefer "continuous_actions" (older exports),
+        # then "actions" (RSL-RL/IsaacLab default), and fall back to the first output.
         outputs = [o.name for o in self._policy.get_outputs()]
         if "continuous_actions" in outputs:
             self._output_names = ["continuous_actions"]
@@ -84,6 +89,14 @@ class OnnxController(ABC):
             self._output_names = [outputs[0]]
         else:
             raise ValueError(f"ONNX policy has no outputs: {policy_path}")
+
+        logger.info(
+            "Loaded policy",
+            policy_path=policy_path,
+            providers=self._policy.get_providers(),
+            outputs=self._output_names,
+        )
+
 
         self._action_scale = action_scale
         self._default_angles = default_angles
