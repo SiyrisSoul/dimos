@@ -175,9 +175,11 @@ class MujocoManipInterface:
             return False
         self._control_mode = ControlMode.VELOCITY
         dt = 1.0 / self._native.control_frequency
-        current = self._native.joint_positions
-        targets = [current[i] + velocities[i] * dt for i in range(min(len(velocities), self._dof))]
+        with self._native._lock:
+            current = list(self._native._joint_positions)
+            targets = [current[i] + velocities[i] * dt for i in range(min(len(velocities), self._dof))]
         self._native.set_joint_position_targets(targets)
+        return True
         return True
 
     def write_stop(self) -> bool:
