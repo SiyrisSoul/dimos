@@ -37,6 +37,7 @@ class NavigationSkillContainer(SkillModule):
     _latest_odom: PoseStamped | None = None
     _skill_started: bool = False
     _similarity_threshold: float = 0.23
+    _navigation_frame: str = 'world'
 
     rpc_calls: list[str] = [
         "SpatialMemory.tag_location",
@@ -93,7 +94,7 @@ class NavigationSkillContainer(SkillModule):
 
         if not self._skill_started:
             raise ValueError(f"{self} has not been started.")
-        tf = self.tf.get("world", "base_link", time_tolerance=2.0)
+        tf = self.tf.get(self._navigation_frame, "base_link", time_tolerance=2.0)
         if not tf:
             return "Could not get the robot's current transform."
 
@@ -162,7 +163,7 @@ class NavigationSkillContainer(SkillModule):
         goal_pose = PoseStamped(
             position=make_vector3(*robot_location.position),
             orientation=Quaternion.from_euler(Vector3(*robot_location.rotation)),
-            frame_id="world",
+            frame_id=self._navigation_frame,
         )
 
         result = self._navigate_to(goal_pose)
@@ -393,7 +394,7 @@ class NavigationSkillContainer(SkillModule):
         return PoseStamped(
             position=make_vector3(pos_x, pos_y, 0),
             orientation=Quaternion.from_euler(make_vector3(0, 0, theta)),
-            frame_id="world",
+            frame_id=self._navigation_frame,
         )
 
 
