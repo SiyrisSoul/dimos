@@ -1,3 +1,7 @@
+from dimos.simulation.plugins import register_all
+
+register_all()
+
 # Try to import Isaac Sim components
 try:
     from .isaac import IsaacSimulator, IsaacStream

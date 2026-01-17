@@ -21,6 +21,7 @@ from dimos.msgs.sensor_msgs import (  # type: ignore[attr-defined]
 )
 from dimos.msgs.trajectory_msgs import JointTrajectory
 from dimos.simulation.manipulators.mujoco_driver import mujoco_sim
+from dimos.simulation.manipulators.sim_module import simulation_module
 
 xarm7_trajectory_sim = mujoco_sim(
     robot="xarm7_mj_description",
@@ -39,6 +40,7 @@ xarm7_trajectory_sim = mujoco_sim(
 
 
 __all__ = [
+    "simulation_module",
     "xarm7_trajectory_sim",
 ]
 

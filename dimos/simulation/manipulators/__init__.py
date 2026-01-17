@@ -12,14 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""MuJoCo simulation backend utilities."""
+"""Simulation manipulator utilities."""
 
 from dimos.simulation.manipulators.mujoco_driver import MujocoDriver
 from dimos.simulation.manipulators.mujoco_manip_interface import (
     MujocoManipInterface,
 )
+from dimos.simulation.manipulators.sim_manip_interface import SimManipInterface
+from dimos.simulation.manipulators.sim_module import (
+    SimulationModule,
+    SimulationModuleConfig,
+    simulation_module,
+)
 
 __all__ = [
     "MujocoDriver",
     "MujocoManipInterface",
+    "SimManipInterface",
+    "SimulationModule",
+    "SimulationModuleConfig",
+    "simulation_module",
 ]
