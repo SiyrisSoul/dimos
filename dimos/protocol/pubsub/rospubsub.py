@@ -65,6 +65,9 @@ class ROSTopic:
     qos: "QoSProfile | None" = None  # Optional per-topic QoS override
 
 
+import uuid
+
+
 class RawROS(PubSub[ROSTopic, Any]):
     """ROS 2 PubSub implementation following the PubSub spec.
 
@@ -72,23 +75,22 @@ class RawROS(PubSub[ROSTopic, Any]):
     native LCM and other pubsub implementations.
     """
 
-    def __init__(
-        self, node_name: str = "dimos_ros_pubsub", qos: "QoSProfile | None" = None
-    ) -> None:
+    def __init__(self, node_name: str | None = None, qos: "QoSProfile | None" = None) -> None:
         """Initialize the ROS pubsub.
 
         Args:
-            node_name: Name for the ROS node
+            node_name: Name for the ROS node (auto-generated if None)
             qos: Optional QoS profile (defaults to BEST_EFFORT for throughput)
         """
         if not ROS_AVAILABLE:
             raise ImportError("rclpy is not installed. ROS pubsub requires ROS 2.")
 
-        self._node_name = node_name
+        # Use unique node name to avoid conflicts in tests
+        self._node_name = node_name or f"dimos_ros_{uuid.uuid4().hex[:8]}"
         self._node: Node | None = None
         self._executor: SingleThreadedExecutor | None = None
         self._spin_thread: threading.Thread | None = None
-        self._running = False
+        self._stop_event = threading.Event()
 
         # Track publishers and subscriptions
         self._publishers: dict[str, Any] = {}
@@ -100,63 +102,73 @@ class RawROS(PubSub[ROSTopic, Any]):
             self._qos = qos
         else:
             self._qos = QoSProfile(
-                reliability=QoSReliabilityPolicy.BEST_EFFORT,
+                reliability=QoSReliabilityPolicy.RELIABLE,
                 history=QoSHistoryPolicy.KEEP_LAST,
                 durability=QoSDurabilityPolicy.VOLATILE,
-                depth=1,
+                depth=5000,
             )
 
     def start(self) -> None:
         """Start the ROS node and executor."""
-        if self._running:
+        if self._spin_thread is not None:
             return
 
         if not rclpy.ok():
             rclpy.init()
 
+        self._stop_event.clear()
         self._node = Node(self._node_name)
         self._executor = SingleThreadedExecutor()
         self._executor.add_node(self._node)
 
-        self._running = True
         self._spin_thread = threading.Thread(target=self._spin, name="ros_pubsub_spin")
         self._spin_thread.start()
 
     def stop(self) -> None:
         """Stop the ROS node and clean up."""
-        if not self._running:
+        if self._spin_thread is None:
             return
 
-        self._running = False
-
-        # Wake up the executor so spin thread can exit
+        # Signal spin thread to stop and shutdown executor
+        self._stop_event.set()
         if self._executor:
-            self._executor.wake()
+            self._executor.shutdown()  # This stops spin_once from blocking
 
-        # Wait for spin thread to finish
-        if self._spin_thread and self._spin_thread.is_alive():
-            self._spin_thread.join(timeout=2.0)
+        # Wait for spin thread to exit
+        self._spin_thread.join(timeout=1.0)
 
-        if self._executor:
-            self._executor.shutdown()
+        # Grab references while holding lock, then destroy without lock
+        with self._lock:
+            subs_to_destroy = [
+                sub for topic_subs in self._subscriptions.values() for sub, _ in topic_subs
+            ]
+            pubs_to_destroy = list(self._publishers.values())
+            self._subscriptions.clear()
+            self._publishers.clear()
+
+        if self._node:
+            for subscription in subs_to_destroy:
+                self._node.destroy_subscription(subscription)
+            for publisher in pubs_to_destroy:
+                self._node.destroy_publisher(publisher)
 
         if self._node:
             self._node.destroy_node()
+            self._node = None
 
-        if rclpy.ok():
-            rclpy.shutdown()
-
-        self._publishers.clear()
-        self._subscriptions.clear()
+        self._executor = None
         self._spin_thread = None
 
     def _spin(self) -> None:
         """Background thread for spinning the ROS executor."""
-        while self._running:
+        while not self._stop_event.is_set():
             executor = self._executor
             if executor is None:
                 break
-            executor.spin_once(timeout_sec=0)  # Non-blocking for max throughput
+            try:
+                executor.spin_once(timeout_sec=0.01)
+            except Exception:
+                break
 
     def _get_or_create_publisher(self, topic: ROSTopic) -> Any:
         """Get existing publisher or create a new one."""
@@ -178,7 +190,7 @@ class RawROS(PubSub[ROSTopic, Any]):
             topic: ROSTopic descriptor with topic name and message type
             message: ROS message to publish
         """
-        if not self._running or not self._node:
+        if self._node is None:
             return
 
         publisher = self._get_or_create_publisher(topic)
@@ -196,7 +208,7 @@ class RawROS(PubSub[ROSTopic, Any]):
         Returns:
             Unsubscribe function
         """
-        if not self._running or not self._node:
+        if self._node is None:
             raise RuntimeError("ROS pubsub not started")
 
         with self._lock:
@@ -230,8 +242,8 @@ class RawROS(PubSub[ROSTopic, Any]):
 class Dimos2RosMixin(PubSubEncoderMixin[TopicT, DimosMessage, ROSMessage]):
     """Mixin that converts between dimos_lcm (LCM-based) and ROS messages.
 
-    This enables seamless interop: publish LCM messages to ROS topics
-    and receive ROS messages as LCM messages.
+    This enables seamless interop: publish Dimos messages to ROS topics
+    and receive ROS messages as Dimos messages.
     """
 
     def encode(self, msg: DimosMessage, *_: TopicT) -> ROSMessage:
