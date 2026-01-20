@@ -12,41 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-
-# Directory where this file is located
-_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-
-"""
-Blueprint for ArUco marker tracking with RealSense camera.
-
-This module provides declarative blueprints for combining the ArucoTracker
-with a RealSense camera, optionally with XArm6 manipulation.
-
-Usage:
-    # ArUco tracking only:
-    from dimos.manipulation.dynamic_tracking.blueprint import aruco_tracker_realsense
-
-    coordinator = aruco_tracker_realsense.build()
-    coordinator.start_all_modules()
-
-    # ArUco tracking + XArm6 manipulation:
-    from dimos.manipulation.dynamic_tracking.blueprint import aruco_tracker_realsense_xarm6
-
-    coordinator = aruco_tracker_realsense_xarm6.build()
-    coordinator.start_all_modules()
-
-    # Or customize:
-    from dimos.manipulation.dynamic_tracking import aruco_tracker
-    from dimos.hardware.sensors.camera.realsense.camera import RealSenseCamera
-    from dimos.core.blueprints import autoconnect
-
-    my_tracker = autoconnect(
-        RealSenseCamera.blueprint(width=848, height=480, fps=30),
-        aruco_tracker(marker_size=0.05, save_images=True),
-    )
-"""
-
 import cv2
 
 from dimos.control.blueprints import orchestrator_xarm6_cartesian
@@ -57,7 +22,6 @@ from dimos.manipulation.dynamic_tracking.aruco_tracker import aruco_tracker
 from dimos.msgs.geometry_msgs import Quaternion, Transform, Vector3
 from dimos.msgs.sensor_msgs import CameraInfo
 from dimos.msgs.sensor_msgs.Image import Image
-from dimos.robot.foxglove_bridge import foxglove_bridge
 
 # =============================================================================
 # ArUco Tracker with RealSense Camera
@@ -90,14 +54,11 @@ aruco_tracker_realsense = (
             marker_size=0.027,  # 27mm markers (default)
             aruco_dict=cv2.aruco.DICT_4X4_50,
             camera_frame_id="camera_color_optical_frame",
-            target_marker_id=0,  # Only track marker ID 0 (set to None to track all)
-            save_images=False,
-            output_dir=os.path.join(_THIS_DIR, "aruco_output"),
-            processing_rate=1,
-            max_loops=300,
+            rate=15,
+            max_loops=10000,
             move_robot_to_aruco=False,
+            robot_connected=False,  # No robot, use dummy EE transform
         ),
-        foxglove_bridge(),
     )
     .transports(
         {
@@ -105,23 +66,17 @@ aruco_tracker_realsense = (
             ("color_image", Image): LCMTransport("/camera/color", Image),
             # Camera info for pose estimation
             ("camera_info", CameraInfo): LCMTransport("/camera/color_info", CameraInfo),
+            # Annotated image with ArUco axes
+            ("annotated_image", Image): LCMTransport("/aruco/annotated", Image),
         }
     )
-    .global_config(viewer_backend="foxglove")
+    .global_config(viewer_backend="rerun-native")
 )
 
 # =============================================================================
 # ArUco Tracker with RealSense Camera + XArm6 Control Orchestrator
 # =============================================================================
-# Combines:
-#   - ControlOrchestrator: XArm6 hardware control with EE pose RPC
-#   - RealSenseCamera: RGB-D camera with hardware interface
-#   - ArucoTracker: Detects ArUco markers and computes transforms
-#
-# Data flow:
-#   RealSenseCamera.color_image ──► ArucoTracker.color_image (marker detection)
-#   RealSenseCamera.camera_info ──► ArucoTracker.camera_info (intrinsics)
-#   ControlOrchestrator.get_ee_positions ──► ArucoTracker (RPC for EE pose)
+# Extends aruco_tracker_realsense with XArm6 control orchestrator.
 # =============================================================================
 
 aruco_tracker_realsense_xarm6 = (
@@ -144,15 +99,11 @@ aruco_tracker_realsense_xarm6 = (
             marker_size=0.027,  # 27mm markers (default)
             aruco_dict=cv2.aruco.DICT_4X4_50,
             camera_frame_id="camera_color_optical_frame",
-            target_marker_id=0,  # Only track marker ID 0 (set to None to track all)
-            save_images=False,
-            output_dir=os.path.join(_THIS_DIR, "aruco_output"),
-            processing_rate=1,
-            max_loops=300,
+            rate=15,
+            max_loops=10000,
             move_robot_to_aruco=True,
-            hardware_id="arm",  # Hardware ID in ControlOrchestrator for EE pose
+            robot_connected=True,
         ),
-        foxglove_bridge(),
     )
     .transports(
         {
@@ -160,9 +111,11 @@ aruco_tracker_realsense_xarm6 = (
             ("color_image", Image): LCMTransport("/camera/color", Image),
             # Camera info for pose estimation
             ("camera_info", CameraInfo): LCMTransport("/camera/color_info", CameraInfo),
+            # Annotated image with ArUco axes
+            ("annotated_image", Image): LCMTransport("/aruco/annotated", Image),
         }
     )
-    .global_config(viewer_backend="foxglove")
+    .global_config(viewer_backend="rerun-native")
 )
 
 
