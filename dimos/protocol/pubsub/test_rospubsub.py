@@ -16,6 +16,7 @@ from collections.abc import Generator
 import threading
 import time
 
+from dimos_lcm.geometry_msgs import PointStamped
 import numpy as np
 import pytest
 
@@ -23,6 +24,9 @@ from dimos.msgs.geometry_msgs.PoseStamped import PoseStamped
 from dimos.msgs.geometry_msgs.Vector3 import Vector3
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
 from dimos.protocol.pubsub.rospubsub import DimosROS, ROSTopic
+
+# Add msg_name to LCM PointStamped for testing nested message conversion
+PointStamped.msg_name = "geometry_msgs.PointStamped"
 from dimos.utils.data import get_data
 from dimos.utils.testing import TimedSensorReplay
 
@@ -48,6 +52,10 @@ def subscriber() -> Generator[DimosROS, None, None]:
 
 @pytest.mark.ros
 def test_basic_conversion(publisher, subscriber):
+    """Test Vector3 publish/subscribe through ROS.
+
+    Simple flat dimos.msgs type with no nesting (just x/y/z floats).
+    """
     topic = ROSTopic("/test_ros_topic", Vector3)
 
     received = []
@@ -70,7 +78,12 @@ def test_basic_conversion(publisher, subscriber):
 
 @pytest.mark.ros
 def test_pointcloud2_pubsub(publisher, subscriber):
-    """Test PointCloud2 publish/subscribe through ROS."""
+    """Test PointCloud2 publish/subscribe through ROS.
+
+    COMPLEX_TYPE - has non-standard attributes (numpy arrays, custom accessors)
+    that can't be treated like a standard message with direct field copy.
+    Uses LCM encode/decode roundtrip to properly convert internal representation.
+    """
     dir_name = get_data("unitree_go2_bigoffice")
 
     # Load real lidar data from replay (5 seconds in)
@@ -122,7 +135,10 @@ def test_pointcloud2_pubsub(publisher, subscriber):
 
 @pytest.mark.ros
 def test_pointcloud2_empty_pubsub(publisher, subscriber):
-    """Test empty PointCloud2 publish/subscribe."""
+    """Test empty PointCloud2 publish/subscribe.
+
+    Edge case for COMPLEX_TYPE with zero points.
+    """
     original = PointCloud2.from_numpy(
         np.array([]).reshape(0, 3),
         frame_id="empty_frame",
@@ -148,7 +164,11 @@ def test_pointcloud2_empty_pubsub(publisher, subscriber):
 
 @pytest.mark.ros
 def test_posestamped_pubsub(publisher, subscriber):
-    """Test PoseStamped publish/subscribe through ROS."""
+    """Test PoseStamped publish/subscribe through ROS.
+
+    COMPLEX_TYPE with custom dimos.msgs implementation and nested messages
+    (Header, Pose containing Point and Quaternion). Uses LCM roundtrip.
+    """
     original = PoseStamped(
         ts=1234567890.123456,
         frame_id="base_link",
@@ -181,3 +201,46 @@ def test_posestamped_pubsub(publisher, subscriber):
     assert converted.z == original.z
     np.testing.assert_allclose(converted.orientation.z, original.orientation.z, rtol=1e-5)
     np.testing.assert_allclose(converted.orientation.w, original.orientation.w, rtol=1e-5)
+
+
+@pytest.mark.ros
+def test_pointstamped_pubsub(publisher, subscriber):
+    """Test PointStamped publish/subscribe through ROS.
+
+    Raw LCM type with nested messages (Header, Point) but NO custom dimos.msgs
+    implementation. Tests recursive field copy for non-COMPLEX_TYPES.
+    """
+    original = PointStamped()
+    original.header.stamp.sec = 1234567890
+    original.header.stamp.nsec = 123456000
+    original.header.frame_id = "map"
+    original.point.x = 1.5
+    original.point.y = 2.5
+    original.point.z = 3.5
+
+    topic = ROSTopic("/test_pointstamped", PointStamped)
+
+    received = []
+    event = threading.Event()
+
+    def callback(msg, t):
+        received.append(msg)
+        event.set()
+
+    subscriber.subscribe(topic, callback)
+    publisher.publish(topic, original)
+
+    assert event.wait(timeout=2.0), "No PointStamped message received"
+    assert len(received) == 1
+
+    converted = received[0]
+
+    # Verify nested header fields are preserved
+    assert converted.header.frame_id == original.header.frame_id
+    assert converted.header.stamp.sec == original.header.stamp.sec
+    assert converted.header.stamp.nsec == original.header.stamp.nsec
+
+    # Verify point coordinates are preserved
+    assert converted.point.x == original.point.x
+    assert converted.point.y == original.point.y
+    assert converted.point.z == original.point.z

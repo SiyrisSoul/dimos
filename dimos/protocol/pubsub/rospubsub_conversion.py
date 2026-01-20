@@ -305,40 +305,6 @@ def _create_ros_instance_for_lcm_msg(lcm_msg: Any, ros_type_hint: str) -> Any:
     raise ValueError(f"Cannot determine ROS type for LCM message: {lcm_type}")
 
 
-def _copy_fields_simple(src: Any, dst: Any) -> None:
-    """Copy fields from source to destination for simple types.
-
-    For simple types where field structures match between ROS and dimos.
-
-    Args:
-        src: Source message
-        dst: Destination message (modified in place)
-    """
-    if hasattr(src, "get_fields_and_field_types"):
-        fields = src.get_fields_and_field_types()
-    elif hasattr(dst, "get_fields_and_field_types"):
-        fields = dst.get_fields_and_field_types()
-    else:
-        # Fallback to dir-based field discovery
-        fields = {
-            k: None
-            for k in dir(src)
-            if not k.startswith("_") and not callable(getattr(src, k, None))
-        }
-
-    for field_name in fields:
-        if hasattr(src, field_name) and hasattr(dst, field_name):
-            src_value = getattr(src, field_name)
-            # Skip methods and private attributes
-            if callable(src_value) or field_name.startswith("_"):
-                continue
-            try:
-                setattr(dst, field_name, src_value)
-            except (AttributeError, TypeError):
-                # Some fields may be read-only or have type mismatches
-                pass
-
-
 def dimos_to_ros(msg: DimosMsg, ros_type: type[ROSMessage]) -> ROSMessage:
     """Convert a dimos message to a ROS message.
 
@@ -364,9 +330,9 @@ def dimos_to_ros(msg: DimosMsg, ros_type: type[ROSMessage]) -> ROSMessage:
         _copy_lcm_to_ros_recursive(lcm_msg, ros_msg)
         return ros_msg
 
-    # Simple: direct field copy
+    # Simple: recursive field copy (handles nested messages)
     ros_msg = ros_type()
-    _copy_fields_simple(msg, ros_msg)
+    _copy_lcm_to_ros_recursive(msg, ros_msg)
     return ros_msg
 
 
@@ -393,7 +359,7 @@ def ros_to_dimos(msg: Any, dimos_type: type[DimosMsg]) -> DimosMsg:
         _copy_ros_to_lcm_recursive(msg, lcm_msg)
         return dimos_type.lcm_decode(lcm_msg.lcm_encode())
 
-    # Simple type: direct field copy
+    # Simple type: recursive field copy (handles nested messages)
     dimos_msg = dimos_type()
-    _copy_fields_simple(msg, dimos_msg)
+    _copy_ros_to_lcm_recursive(msg, dimos_msg)
     return dimos_msg
