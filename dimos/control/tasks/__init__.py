@@ -14,12 +14,18 @@
 
 """Task implementations for the ControlOrchestrator."""
 
+from dimos.control.tasks.joint_stream_task import (
+    JointStreamTask,
+    JointStreamTaskConfig,
+)
 from dimos.control.tasks.trajectory_task import (
     JointTrajectoryTask,
     JointTrajectoryTaskConfig,
 )
 
 __all__ = [
+    "JointStreamTask",
+    "JointStreamTaskConfig",
     "JointTrajectoryTask",
     "JointTrajectoryTaskConfig",
 ]

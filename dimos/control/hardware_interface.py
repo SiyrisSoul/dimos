@@ -68,21 +68,6 @@ class HardwareInterface(Protocol):
         """
         ...
 
-    def write_cartesian_position(
-        self, pose: dict[str, float], velocity: float = 1.0, wait: bool = False
-    ) -> bool:
-        """Write end-effector pose (Cartesian move).
-
-        Args:
-            pose: Dict with keys: x, y, z (meters), roll, pitch, yaw (radians)
-            velocity: Movement velocity (0.0-1.0)
-            wait: If True, block until motion completes
-
-        Returns:
-            True if command was sent successfully
-        """
-        ...
-
     def write_command(self, commands: dict[str, float], mode: ControlMode) -> bool:
         """Write commands to hardware.
 
@@ -184,11 +169,6 @@ class BackendHardwareInterface:
         """
         return self._backend.read_cartesian_position()
 
-    def write_cartesian_position(
-        self, pose: dict[str, float], velocity: float = 1.0, wait: bool = False
-    ) -> bool:
-        """Write end-effector pose (Cartesian move)."""
-        return self._backend.write_cartesian_position(pose, velocity, wait)
 
     def write_command(self, commands: dict[str, float], mode: ControlMode) -> bool:
         """Write commands - allows partial joint sets, holds last for missing.

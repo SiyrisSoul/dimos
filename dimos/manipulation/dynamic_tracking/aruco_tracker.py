@@ -13,20 +13,22 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-import os
 from threading import Event, Thread
 import time
 from typing import Any
 
 import cv2
 import numpy as np
+import pinocchio
 import rerun as rr
 from scipy.spatial.transform import Rotation
 
 from dimos.core import In, Module, ModuleConfig, Out, rpc
 from dimos.core.rpc_client import RpcCall
 from dimos.dashboard.rerun_init import connect_rerun
+from dimos.manipulation.pinocchio.pin_kinematics import PinocchioIK
 from dimos.msgs.geometry_msgs import Quaternion, Transform, Vector3
+from dimos.msgs.sensor_msgs import JointState
 from dimos.msgs.sensor_msgs.CameraInfo import CameraInfo
 from dimos.msgs.sensor_msgs.Image import Image
 from dimos.utils.logging_config import setup_logger
@@ -48,13 +50,15 @@ class ArucoTrackerConfig(ModuleConfig):
     move_robot_to_aruco_rotation: bool = (
         False  # Whether to follow ArUco rotation (False = fixed orientation)
     )
-    safety_max_delta: float = 0.10  # Max allowed 3D distance (meters) between commands
-    safety_max_rot_delta: float = (
-        0.2  # Max allowed rotation delta (radians) per axis between commands
-    )
+    safety_max_joint_delta_deg: float = 15.0  # Max allowed joint angle change (degrees) per command
     hardware_id: str = "arm"  # Hardware ID for ControlOrchestrator EE pose lookup
     robot_connected: bool = True  # Whether robot is connected (False = use dummy EE transform)
     expected_marker_count: int = 4  # Expected number of ArUco markers (±1 tolerance)
+
+    # IK streaming config
+    mjcf_path: str = ""  # Path to MJCF file for IK solver (required)
+    ee_joint_id: int = 6  # End-effector joint ID in the kinematic chain
+    joint_names: list[str] | None = None  # Joint names for JointState message
 
 
 class ArucoTracker(Module[ArucoTrackerConfig]):
@@ -63,12 +67,17 @@ class ArucoTracker(Module[ArucoTrackerConfig]):
 
     Subscribes to camera images and camera info, detects ArUco markers,
     and publishes their transforms relative to the camera frame.
+
+    Uses Pinocchio IK to compute joint angles from target EE pose and streams
+    joint positions via Out[JointState] to the ControlOrchestrator.
     """
 
     # Transport ports
     color_image: In[Image]
     camera_info: In[CameraInfo]
+    joint_state: In[JointState]  # Current joint positions from orchestrator
     annotated_image: Out[Image]
+    joint_command: Out[JointState]  # Streamed joint positions for orchestrator
 
     config: ArucoTrackerConfig
     default_config = ArucoTrackerConfig
@@ -91,13 +100,20 @@ class ArucoTracker(Module[ArucoTrackerConfig]):
         self._processing_thread: Thread | None = None
         self._loop_count = 0
 
-        # RPC calls to ControlOrchestrator
+        # RPC call for reading EE positions
         self._get_ee_positions_rpc: RpcCall | None = None
-        self._move_to_cartesian_pose_rpc: RpcCall | None = None
 
-        # Safety: track last commanded pose for delta check
-        self._last_commanded_pos: tuple[float, float, float] | None = None
-        self._last_commanded_rot: tuple[float, float, float] | None = None
+        # IK solver for computing joint angles from EE pose
+        # Will be initialized from actual robot joint positions via joint_state subscription
+        self._last_q: np.ndarray | None = None
+
+        if not self.config.mjcf_path:
+            raise ValueError("mjcf_path must be set for IK solver")
+        self._ik_solver = PinocchioIK(
+            mjcf_path=self.config.mjcf_path,
+            ee_joint_id=self.config.ee_joint_id,
+        )
+        logger.info(f"IK solver initialized with MJCF: {self.config.mjcf_path}")
 
     @rpc
     def start(self) -> None:
@@ -107,6 +123,7 @@ class ArucoTracker(Module[ArucoTrackerConfig]):
         connect_rerun()
         self._disposables.add(self.camera_info.observable().subscribe(self._update_camera_info))
         self._disposables.add(self.color_image.observable().subscribe(self._store_latest_image))
+        self._disposables.add(self.joint_state.observable().subscribe(self._update_joint_state))
 
         self._loop_count = 0
         self._stop_event.clear()
@@ -137,17 +154,17 @@ class ArucoTracker(Module[ArucoTrackerConfig]):
                 np.array(camera_info.D, dtype=np.float32) if camera_info.D else np.zeros(5)
             )
 
+    def _update_joint_state(self, joint_state: JointState) -> None:
+        """Update last_q from actual robot joint positions."""
+        if joint_state.position:
+            self._last_q = np.array(joint_state.position)
+
     @rpc
     def set_ControlOrchestrator_get_ee_positions(self, rpc_call: RpcCall) -> None:
         """Wire get_ee_positions RPC from ControlOrchestrator."""
         self._get_ee_positions_rpc = rpc_call
         self._get_ee_positions_rpc.set_rpc(self.rpc)
 
-    @rpc
-    def set_ControlOrchestrator_move_to_cartesian_pose(self, rpc_call: RpcCall) -> None:
-        """Wire move_to_cartesian_pose RPC from ControlOrchestrator."""
-        self._move_to_cartesian_pose_rpc = rpc_call
-        self._move_to_cartesian_pose_rpc.set_rpc(self.rpc)
 
     def _log_transform_to_rerun(self, transform: Transform) -> None:
         """Log a transform to Rerun without named frame references (avoids duplicate entries)."""
@@ -169,42 +186,6 @@ class ArucoTracker(Module[ArucoTrackerConfig]):
                 ),
             ),
         )
-
-    def _check_safety_delta(
-        self, x: float, y: float, z: float, roll: float, pitch: float, yaw: float
-    ) -> bool:
-        """Check if the new pose is within safety limits of the last commanded pose."""
-        # Check position delta
-        if self._last_commanded_pos is not None:
-            dx = x - self._last_commanded_pos[0]
-            dy = y - self._last_commanded_pos[1]
-            dz = z - self._last_commanded_pos[2]
-            pos_delta = (dx**2 + dy**2 + dz**2) ** 0.5
-
-            if pos_delta > self.config.safety_max_delta:
-                logger.warning(
-                    f"Safety check failed: position delta {pos_delta:.3f}m exceeds limit {self.config.safety_max_delta:.3f}m"
-                )
-                return False
-
-        # Check orientation delta
-        if self._last_commanded_rot is not None:
-            d_roll = abs(roll - self._last_commanded_rot[0])
-            d_pitch = abs(pitch - self._last_commanded_rot[1])
-            d_yaw = abs(yaw - self._last_commanded_rot[2])
-
-            # Handle wrap-around for roll (can go from π to -π)
-            if d_roll > 3.14159:
-                d_roll = 2 * 3.14159 - d_roll
-
-            for name, delta in [("roll", d_roll), ("pitch", d_pitch), ("yaw", d_yaw)]:
-                if delta > self.config.safety_max_rot_delta:
-                    logger.warning(
-                        f"Safety check failed: {name} delta {delta:.3f}rad exceeds limit {self.config.safety_max_rot_delta:.3f}rad"
-                    )
-                    return False
-
-        return True
 
     def _processing_loop(self) -> None:
         """Processing loop that runs at the configured rate."""
@@ -232,6 +213,7 @@ class ArucoTracker(Module[ArucoTrackerConfig]):
             if sleep_time > 0:
                 time.sleep(sleep_time)
         logger.info(f"ArUco processing loop completed after {self._loop_count} iterations")
+
 
     def _process_image(self, image: Image) -> None:
         """Process image to detect ArUco markers and average their poses."""
@@ -322,6 +304,8 @@ class ArucoTracker(Module[ArucoTrackerConfig]):
             image.format.name,
         )
 
+
+
     def _move_to_aruco(self, aruco_wrt_robot_base: Transform) -> None:
         """Move the robot to the ArUco marker position with offset."""
         import math
@@ -374,43 +358,73 @@ class ArucoTracker(Module[ArucoTrackerConfig]):
             f"roll={reach_roll:.3f}, pitch={reach_pitch:.3f}, yaw={reach_yaw:.3f}"
         )
 
-        # Safety check: ensure delta is within limits
-        if not self._check_safety_delta(
-            reach_x, reach_y, reach_z, reach_roll, reach_pitch, reach_yaw
-        ):
-            logger.warning("Skipping move command due to safety check failure")
-            return
-
-        if self._move_to_cartesian_pose_rpc is None:
-            logger.warning("move_to_cartesian_pose RPC not available")
-            return
-
         if not self.config.move_robot_to_aruco:
             logger.info("move_robot_to_aruco is False, skipping move command")
             return
+        # Compute IK and stream joint command
+        self._stream_joint_command(reach_x, reach_y, reach_z, reach_roll, reach_pitch, reach_yaw)
 
-        try:
-            success = self._move_to_cartesian_pose_rpc(
-                hardware_id=self.config.hardware_id,
-                x=reach_x,
-                y=reach_y,
-                z=reach_z,
-                roll=reach_roll,
-                pitch=reach_pitch,
-                yaw=reach_yaw,
-                velocity=0.2,
-                wait=True,
+
+
+    def _stream_joint_command(
+        self, x: float, y: float, z: float, roll: float, pitch: float, yaw: float
+    ) -> None:
+        """Compute IK and stream joint positions via Out[JointState]."""
+        # Wait for joint state from robot before computing IK
+        if self._last_q is None:
+            logger.warning("No joint state received yet, skipping IK command")
+            return
+
+        # Build target pose for IK
+        position = np.array([x, y, z])
+        rotation = pinocchio.rpy.rpyToMatrix(roll, pitch, yaw)
+        target_pose = pinocchio.SE3(rotation, position)
+
+        # Solve IK (warm-start with last solution from robot)
+        q_solution, success = self._ik_solver.solve_ik(target_pose, q_init=self._last_q)
+
+        if not success:
+            logger.warning("IK did not converge, skipping command")
+            return
+
+        # Safety check: ensure no joint moves more than the configured limit
+        q_new = q_solution.flatten()
+        q_old = self._last_q.flatten()
+        joint_deltas_deg = np.abs(np.degrees(q_new - q_old))    
+        max_delta_deg = np.max(joint_deltas_deg)
+
+        logger.debug(f"inv kinematics solution (deg): {[f'{np.degrees(angle):.1f}' for angle in q_new]}")
+
+        if max_delta_deg > self.config.safety_max_joint_delta_deg:
+            max_joint_idx = np.argmax(joint_deltas_deg)
+            logger.error(
+                f"Safety check failed: joint {max_joint_idx + 1} delta {max_delta_deg:.1f}° "
+                f"exceeds limit {self.config.safety_max_joint_delta_deg:.1f}°"
             )
-            if not success:
-                logger.warning("Failed to move to pose, stopping processing loop")
-                self._loop_count = self.config.max_loops
-            else:
-                self._last_commanded_pos = (reach_x, reach_y, reach_z)
-                self._last_commanded_rot = (reach_roll, reach_pitch, reach_yaw)
-                logger.debug("Successfully commanded move to pose")
-        except Exception as e:
-            logger.error(f"Error calling move_to_cartesian_pose: {e}")
-            self._loop_count = self.config.max_loops
+            return
+
+        # Build joint names
+        joint_names = self.config.joint_names
+        if joint_names is None:
+            # Default joint names based on hardware_id
+            num_joints = len(q_solution.flatten())
+            joint_names = [f"{self.config.hardware_id}_joint{i + 1}" for i in range(num_joints)]
+
+        # Create and publish JointState message
+        joint_positions = q_solution.flatten().tolist()
+        msg = JointState(
+            ts=time.time(),
+            frame_id="aruco_tracker",
+            name=joint_names,
+            position=joint_positions,
+            velocity=[],
+            effort=[],
+        )
+        self.joint_command.publish(msg)
+
+        logger.debug(f"Streamed joint command: {[f'{p:.3f}' for p in joint_positions]}")
+
+
 
     def _set_transforms(
         self, marker_id: int | str, tvec: np.ndarray, quat: np.ndarray, timestamp: float
@@ -477,6 +491,8 @@ class ArucoTracker(Module[ArucoTrackerConfig]):
             self._log_transform_to_rerun(ee_transform)
 
         return aruco_transform
+
+
 
     def _publish_annotated_image(self, display_image: np.ndarray, image_format: str) -> None:
         """Publish the annotated image to subscribers and Rerun."""

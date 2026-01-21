@@ -46,6 +46,8 @@ all_blueprints = {
     "orchestrator-dual-mock": "dimos.control.blueprints:orchestrator_dual_mock",
     "orchestrator-dual-xarm": "dimos.control.blueprints:orchestrator_dual_xarm",
     "orchestrator-piper-xarm": "dimos.control.blueprints:orchestrator_piper_xarm",
+    "orchestrator-stream-mock": "dimos.control.blueprints:orchestrator_stream_mock",
+    "orchestrator-stream-xarm6": "dimos.control.blueprints:orchestrator_stream_xarm6",
     # Demo blueprints
     "demo-camera": "dimos.hardware.sensors.camera.module:demo_camera",
     "demo-osm": "dimos.mapping.osm.demo_osm:demo_osm",

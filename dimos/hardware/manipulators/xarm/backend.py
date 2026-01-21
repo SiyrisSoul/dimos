@@ -21,7 +21,6 @@ import math
 
 from xarm.wrapper import XArmAPI
 
-from dimos.core import logger
 from dimos.hardware.manipulators.spec import (
     ControlMode,
     JointLimits,
@@ -94,7 +93,7 @@ class XArmBackend(ManipulatorBackend):
             self._arm.connect()
 
             if not self._arm.connected:
-                logger.error(f"XArm at {self._ip} not reachable (connected=False)")
+                print(f"ERROR: XArm at {self._ip} not reachable (connected=False)")
                 return False
 
             # Initialize to servo mode for high-frequency control
@@ -104,7 +103,7 @@ class XArmBackend(ManipulatorBackend):
 
             return True
         except Exception as e:
-            logger.error(f"Failed to connect to XArm at {self._ip}: {e}")
+            print(f"ERROR: Failed to connect to XArm at {self._ip}: {e}")
             return False
 
     def disconnect(self) -> None:
@@ -259,7 +258,7 @@ class XArmBackend(ManipulatorBackend):
 
         # Use set_servo_angle_j for high-frequency servo control (100Hz+)
         # This only executes the last instruction, suitable for real-time control
-        code: int = self._arm.set_servo_angle_j(angles, speed=100, mvacc=500)
+        code: int = self._arm.set_servo_angle_j(angles, speed=5, mvacc=10)
         return code == 0
 
     def write_joint_velocities(self, velocities: list[float]) -> bool:
@@ -332,79 +331,22 @@ class XArmBackend(ManipulatorBackend):
     def write_cartesian_position(
         self,
         pose: dict[str, float],
-        velocity: float = 0.2,
-        wait: bool = False,
+        velocity: float = 1.0,
     ) -> bool:
-        """Write end-effector pose (meters -> mm, radians -> degrees).
-
-        Note: Switches to position mode (mode 0) since set_position requires it.
-        """
+        """Write end-effector pose (meters -> mm, radians -> degrees)."""
         if not self._arm:
-            logger.warning("XArm not connected")
             return False
-
-        # set_position requires position mode (mode 0)
-        if self._arm.mode != _XARM_MODE_POSITION:
-            logger.debug(f"Switching from mode {self._arm.mode} to position mode (0)")
-            self._arm.set_mode(_XARM_MODE_POSITION)
-            self._arm.set_state(0)
-
-        x_mm = self._m_to_mm(pose.get("x", 0))
-        y_mm = self._m_to_mm(pose.get("y", 0))
-        z_mm = self._m_to_mm(pose.get("z", 0))
-        roll_deg = self._rad_to_deg(pose.get("roll", 0))
-        pitch_deg = self._rad_to_deg(pose.get("pitch", 0))
-        yaw_deg = self._rad_to_deg(pose.get("yaw", 0))
-        speed = self._velocity_to_speed_mm(velocity)
-
-        logger.debug(
-            f"write_cartesian_position: x={x_mm:.1f}mm y={y_mm:.1f}mm z={z_mm:.1f}mm "
-            f"roll={roll_deg:.1f}° pitch={pitch_deg:.1f}° yaw={yaw_deg:.1f}° "
-            f"speed={speed:.1f}mm/s wait={wait}"
-        )
 
         code: int = self._arm.set_position(
-            x=x_mm,
-            y=y_mm,
-            z=z_mm,
-            roll=roll_deg,
-            pitch=pitch_deg,
-            yaw=yaw_deg,
-            speed=speed,
-            wait=wait,
+            x=self._m_to_mm(pose.get("x", 0)),
+            y=self._m_to_mm(pose.get("y", 0)),
+            z=self._m_to_mm(pose.get("z", 0)),
+            roll=self._rad_to_deg(pose.get("roll", 0)),
+            pitch=self._rad_to_deg(pose.get("pitch", 0)),
+            yaw=self._rad_to_deg(pose.get("yaw", 0)),
+            speed=self._velocity_to_speed_mm(velocity),
+            wait=False,
         )
-
-        if code != 0:
-            logger.warning(f"XArm set_position returned error code: {code}")
-        return code == 0
-
-    def write_servo_cartesian(self, pose: dict[str, float]) -> bool:
-        """Stream end-effector pose in servo mode (for dynamic tracking).
-
-        Uses set_servo_cartesian for low-latency, high-frequency control.
-        Does NOT wait - returns immediately after sending command.
-        """
-        if not self._arm:
-            logger.warning("XArm not connected")
-            return False
-
-        # Ensure servo Cartesian mode (mode 1)
-        if self._arm.mode != _XARM_MODE_SERVO_CARTESIAN:
-            logger.debug(f"Switching from mode {self._arm.mode} to servo Cartesian mode (1)")
-            self._arm.set_mode(_XARM_MODE_SERVO_CARTESIAN)
-            self._arm.set_state(0)
-
-        x_mm = self._m_to_mm(pose.get("x", 0))
-        y_mm = self._m_to_mm(pose.get("y", 0))
-        z_mm = self._m_to_mm(pose.get("z", 0))
-        roll_deg = self._rad_to_deg(pose.get("roll", 0))
-        pitch_deg = self._rad_to_deg(pose.get("pitch", 0))
-        yaw_deg = self._rad_to_deg(pose.get("yaw", 0))
-
-        code: int = self._arm.set_servo_cartesian([x_mm, y_mm, z_mm, roll_deg, pitch_deg, yaw_deg])
-
-        if code != 0:
-            logger.warning(f"XArm set_servo_cartesian returned error code: {code}")
         return code == 0
 
     # =========================================================================

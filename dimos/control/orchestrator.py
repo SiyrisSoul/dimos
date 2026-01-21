@@ -27,7 +27,6 @@ Features:
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
 import threading
 import time
@@ -36,7 +35,7 @@ from typing import TYPE_CHECKING, Any
 from dimos.control.hardware_interface import BackendHardwareInterface, HardwareInterface
 from dimos.control.task import ControlTask
 from dimos.control.tick_loop import TickLoop
-from dimos.core import Module, Out, rpc
+from dimos.core import In, Module, Out, rpc
 from dimos.core.module import ModuleConfig
 from dimos.msgs.sensor_msgs import (
     JointState,  # noqa: TC001 - needed at runtime for Out[JointState]
@@ -45,6 +44,8 @@ from dimos.msgs.trajectory_msgs import JointTrajectory, TrajectoryState
 from dimos.utils.logging_config import setup_logger
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from dimos.hardware.manipulators.spec import ManipulatorBackend
 
 logger = setup_logger()
@@ -121,6 +122,7 @@ class ControlOrchestratorConfig(ModuleConfig):
         log_ticks: Whether to log tick information (verbose)
         hardware: List of hardware configurations to create on start
         tasks: List of task configurations to create on start
+        streaming_task_name: Task name for joint_command input (if using streaming)
     """
 
     tick_rate: float = 100.0
@@ -129,6 +131,7 @@ class ControlOrchestratorConfig(ModuleConfig):
     log_ticks: bool = False
     hardware: list[HardwareConfig] = field(default_factory=lambda: [])
     tasks: list[TaskConfig] = field(default_factory=lambda: [])
+    streaming_task_name: str | None = None
 
 
 # =============================================================================
@@ -167,6 +170,9 @@ class ControlOrchestrator(Module[ControlOrchestratorConfig]):
     # Output: Aggregated joint state for external consumers
     joint_state: Out[JointState]
 
+    # Input: Streaming joint commands (for real-time control)
+    joint_command: In[JointState]
+
     config: ControlOrchestratorConfig
     default_config = ControlOrchestratorConfig
 
@@ -187,7 +193,28 @@ class ControlOrchestrator(Module[ControlOrchestratorConfig]):
         # Tick loop (created on start)
         self._tick_loop: TickLoop | None = None
 
+        # Subscription handle for streaming joint commands
+        self._joint_command_unsubscribe: Callable[[], None] | None = None
+
         logger.info(f"ControlOrchestrator initialized at {self.config.tick_rate}Hz")
+
+    def _on_joint_command(self, msg: JointState) -> None:
+        """Handle incoming joint command from In[JointState].
+
+        Routes to the configured streaming task for low-latency control.
+        """
+        task_name = self.config.streaming_task_name
+        if task_name is None:
+            return  # No streaming task configured
+
+        with self._task_lock:
+            task = self._tasks.get(task_name)
+            if task is None:
+                return
+
+            if hasattr(task, "set_positions"):
+                t_now = time.perf_counter()
+                task.set_positions(list(msg.position), t_now)  # type: ignore[attr-defined]
 
     # =========================================================================
     # Config-based Setup
@@ -264,6 +291,17 @@ class ControlOrchestrator(Module[ControlOrchestratorConfig]):
             return JointTrajectoryTask(
                 cfg.name,
                 JointTrajectoryTaskConfig(
+                    joint_names=cfg.joint_names,
+                    priority=cfg.priority,
+                ),
+            )
+
+        elif task_type == "streaming":
+            from dimos.control.tasks import JointStreamTask, JointStreamTaskConfig
+
+            return JointStreamTask(
+                cfg.name,
+                JointStreamTaskConfig(
                     joint_names=cfg.joint_names,
                     priority=cfg.priority,
                 ),
@@ -360,58 +398,23 @@ class ControlOrchestrator(Module[ControlOrchestratorConfig]):
             return positions
 
     @rpc
-    def get_ee_positions(self) -> dict[str, dict[str, float] | None]:
-        """Get end-effector positions for all hardware.
-
-        Returns:
-            Dict mapping hardware_id -> {x, y, z, roll, pitch, yaw} or None if not supported
-        """
-        with self._hardware_lock:
-            positions: dict[str, dict[str, float] | None] = {}
-            for hw_id, hw in self._hardware.items():
-                positions[hw_id] = hw.read_ee_position()
-            return positions
-
-    @rpc
-    def move_to_cartesian_pose(
-        self,
-        hardware_id: str,
-        x: float,
-        y: float,
-        z: float,
-        roll: float,
-        pitch: float,
-        yaw: float,
-        velocity: float = 1.0,
-        wait: bool = True,
-    ) -> bool:
-        """Move a hardware's end-effector to a Cartesian pose.
+    def get_hardware_mode(self, hardware_id: str) -> int | None:
+        """Get current control mode for a hardware backend.
 
         Args:
-            hardware_id: ID of the hardware to move
-            x, y, z: Position in meters
-            roll, pitch, yaw: Orientation in radians
-            velocity: Movement velocity (0.0-1.0, default 1.0)
-            wait: If True, block until motion completes (default True)
+            hardware_id: Hardware identifier (e.g., "arm")
 
         Returns:
-            True if command was sent successfully, False otherwise
+            Current mode as int (1 = SERVO_POSITION), or None if not found
         """
         with self._hardware_lock:
-            hw = self._hardware.get(hardware_id)
-            if hw is None:
-                logger.warning(f"Hardware {hardware_id} not found")
-                return False
-
-            pose = {
-                "x": x,
-                "y": y,
-                "z": z,
-                "roll": roll,
-                "pitch": pitch,
-                "yaw": yaw,
-            }
-            return hw.write_cartesian_position(pose, velocity, wait)
+            interface = self._hardware.get(hardware_id)
+            if interface is None:
+                return None
+            # Access the underlying backend's current mode
+            if hasattr(interface, "_current_mode") and interface._current_mode is not None:
+                return interface._current_mode.value
+            return None
 
     # =========================================================================
     # Task Management (RPC)
@@ -521,6 +524,69 @@ class ControlOrchestrator(Module[ControlOrchestratorConfig]):
             return task.cancel()  # type: ignore[attr-defined,no-any-return]
 
     # =========================================================================
+    # Streaming Joint Control (RPC)
+    # =========================================================================
+
+    @rpc
+    def set_streaming_positions(self, task_name: str, positions: list[float]) -> bool:
+        """Set joint positions for a streaming task.
+
+        Use this for real-time control (teleoperation, tracking, etc.)
+        instead of execute_trajectory().
+
+        Args:
+            task_name: Name of the streaming task
+            positions: Joint positions in radians
+
+        Returns:
+            True if accepted, False if task not found or wrong type
+        """
+        with self._task_lock:
+            task = self._tasks.get(task_name)
+            if task is None:
+                logger.warning(f"Task {task_name} not found")
+                return False
+
+            if not hasattr(task, "set_positions"):
+                logger.warning(f"Task {task_name} doesn't support set_positions()")
+                return False
+
+            t_now = time.perf_counter()
+            return task.set_positions(positions, t_now)  # type: ignore[attr-defined,no-any-return]
+
+    @rpc
+    def start_streaming(self, task_name: str) -> bool:
+        """Activate a streaming task."""
+        with self._task_lock:
+            task = self._tasks.get(task_name)
+            if task is None:
+                logger.warning(f"Task {task_name} not found")
+                return False
+
+            if not hasattr(task, "start"):
+                logger.warning(f"Task {task_name} doesn't support start()")
+                return False
+
+            task.start()  # type: ignore[attr-defined]
+            return True
+
+    @rpc
+    def stop_streaming(self, task_name: str) -> bool:
+        """Deactivate a streaming task."""
+        with self._task_lock:
+            task = self._tasks.get(task_name)
+            if task is None:
+                logger.warning(f"Task {task_name} not found")
+                return False
+
+            if not hasattr(task, "stop"):
+                logger.warning(f"Task {task_name} doesn't support stop()")
+                return False
+
+            task.stop()  # type: ignore[attr-defined]
+            return True
+
+    # =========================================================================
     # Lifecycle
     # =========================================================================
 
@@ -552,12 +618,24 @@ class ControlOrchestrator(Module[ControlOrchestratorConfig]):
         )
         self._tick_loop.start()
 
+        # Subscribe to streaming joint commands if configured
+        if self.config.streaming_task_name:
+            self._joint_command_unsubscribe = self.joint_command.subscribe(self._on_joint_command)
+            logger.info(
+                f"Subscribed to joint_command for streaming task: {self.config.streaming_task_name}"
+            )
+
         logger.info(f"ControlOrchestrator started at {self.config.tick_rate}Hz")
 
     @rpc
     def stop(self) -> None:
         """Stop the orchestrator."""
         logger.info("Stopping ControlOrchestrator...")
+
+        # Unsubscribe from joint commands
+        if self._joint_command_unsubscribe:
+            self._joint_command_unsubscribe()
+            self._joint_command_unsubscribe = None
 
         if self._tick_loop:
             self._tick_loop.stop()

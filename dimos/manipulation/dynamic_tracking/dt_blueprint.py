@@ -14,14 +14,19 @@
 
 import cv2
 
-from dimos.control.blueprints import orchestrator_xarm6_cartesian
+from dimos.control.blueprints import orchestrator_streaming_xarm6
 from dimos.core.blueprints import autoconnect
 from dimos.core.transport import LCMTransport
 from dimos.hardware.sensors.camera.realsense.camera import RealSenseCamera
 from dimos.manipulation.dynamic_tracking.aruco_tracker import aruco_tracker
 from dimos.msgs.geometry_msgs import Quaternion, Transform, Vector3
-from dimos.msgs.sensor_msgs import CameraInfo
+from dimos.msgs.sensor_msgs import CameraInfo, JointState
 from dimos.msgs.sensor_msgs.Image import Image
+
+# MJCF path for XArm6 IK solver
+_XARM6_MJCF_PATH = (
+    "/home/ruthwik/Documents/dimos/dimos/simulation/manipulators/data/xarm6/xarm6_nohand.xml"
+)
 
 # =============================================================================
 # ArUco Tracker with RealSense Camera
@@ -59,6 +64,9 @@ aruco_tracker_realsense = (
             move_robot_to_aruco=False,
             robot_connected=False,  # No robot, use dummy EE transform
             expected_marker_count=4,
+            # IK config (required even when not moving robot)
+            mjcf_path=_XARM6_MJCF_PATH,
+            ee_joint_id=6,
         ),
     )
     .transports(
@@ -75,14 +83,19 @@ aruco_tracker_realsense = (
 )
 
 # =============================================================================
-# ArUco Tracker with RealSense Camera + XArm6 Control Orchestrator
+# ArUco Tracker with RealSense Camera + XArm6 Streaming Control
 # =============================================================================
-# Extends aruco_tracker_realsense with XArm6 control orchestrator.
+# Uses IK streaming instead of RPC for lower latency control.
+# ArucoTracker computes IK and streams joint positions to orchestrator.
+#
+# Data flow:
+#   RealSenseCamera ──► ArucoTracker (marker detection + IK)
+#   ArucoTracker.joint_command ──► ControlOrchestrator.joint_command (streaming)
 # =============================================================================
 
 aruco_tracker_realsense_xarm6 = (
     autoconnect(
-        orchestrator_xarm6_cartesian,
+        orchestrator_streaming_xarm6,
         RealSenseCamera.blueprint(
             width=848,
             height=480,
@@ -97,15 +110,19 @@ aruco_tracker_realsense_xarm6 = (
             align_depth_to_color=False,
         ),
         aruco_tracker(
-            marker_size=0.015,  # 15mm markers (default)
+            marker_size=0.015,  # 15mm markers
             aruco_dict=cv2.aruco.DICT_4X4_50,
             camera_frame_id="camera_color_optical_frame",
-            rate=15,
+            rate=1,
             max_loops=10000,
             move_robot_to_aruco=True,
-            move_robot_to_aruco_rotation=True,  # Whether to follow ArUco rotation (False = fixed orientation)
+            move_robot_to_aruco_rotation=False,  # Fixed orientation for safety
             robot_connected=True,
             expected_marker_count=4,
+            # IK streaming config
+            mjcf_path=_XARM6_MJCF_PATH,
+            ee_joint_id=6,
+            hardware_id="arm",
         ),
     )
     .transports(
@@ -116,10 +133,17 @@ aruco_tracker_realsense_xarm6 = (
             ("camera_info", CameraInfo): LCMTransport("/camera/color_info", CameraInfo),
             # Annotated image with ArUco axes
             ("annotated_image", Image): LCMTransport("/aruco/annotated", Image),
+            # Joint state from orchestrator (for IK warm-starting)
+            ("joint_state", JointState): LCMTransport("/orchestrator/joint_state", JointState),
+            # Joint command streaming (ArucoTracker -> Orchestrator)
+            ("joint_command", JointState): LCMTransport("/orchestrator/joint_command", JointState),
         }
     )
     .global_config(viewer_backend="rerun-native")
 )
 
 
-__all__ = ["aruco_tracker_realsense", "aruco_tracker_realsense_xarm6"]
+__all__ = [
+    "aruco_tracker_realsense",
+    "aruco_tracker_realsense_xarm6",
+]
