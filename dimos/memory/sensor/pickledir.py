@@ -15,7 +15,6 @@
 
 import bisect
 from collections.abc import Iterator
-from functools import lru_cache
 import glob
 import os
 from pathlib import Path
@@ -26,22 +25,22 @@ from dimos.utils.data import get_data, get_data_dir
 
 
 class PickleDirStore(SensorStore[T]):
-    """Pickle directory backend. Compatible with TimedSensorStorage/TimedSensorReplay format.
+    """Pickle directory backend. Files named by timestamp.
 
     Directory structure:
         {name}/
-            000.pickle  # (timestamp, data)
-            001.pickle
+            1704067200.123.pickle
+            1704067200.456.pickle
             ...
 
     Usage:
         # Load existing recording (auto-downloads from LFS if needed)
         store = PickleDirStore("unitree_go2_bigoffice/lidar")
-        data = store.find_closest(seek=10.0)
+        data = store.find_closest_seek(10.0)
 
         # Create new recording (directory created on first save)
         store = PickleDirStore("my_recording/images")
-        store.store(timestamp, image)
+        store.save(image)  # uses image.ts for timestamp
     """
 
     def __init__(self, name: str) -> None:
@@ -149,7 +148,6 @@ class PickleDirStore(SensorStore[T]):
         self._timestamps = timestamps
         return timestamps
 
-    @lru_cache(maxsize=128)
     def _load_file(self, filepath: Path) -> T | None:
         """Load data from a pickle file (LRU cached)."""
         try:

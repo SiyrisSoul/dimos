@@ -185,3 +185,189 @@ class TestSensorStore:
         assert store.load(1.0) is None
         assert store._find_closest_timestamp(1.0) is None
         assert list(store._iter_items()) == []
+
+    def test_first_and_first_timestamp(self, store_factory, store_name, temp_dir):
+        store = store_factory(temp_dir)
+
+        # Empty store
+        assert store.first() is None
+        assert store.first_timestamp() is None
+
+        # Add data
+        store.save(SampleData("b", 2.0))
+        store.save(SampleData("a", 1.0))
+        store.save(SampleData("c", 3.0))
+
+        # Should return first by timestamp, not insertion order
+        assert store.first_timestamp() == 1.0
+        assert store.first() == SampleData("a", 1.0)
+
+    def test_find_closest(self, store_factory, store_name, temp_dir):
+        store = store_factory(temp_dir)
+        store.save(SampleData("a", 1.0))
+        store.save(SampleData("b", 2.0))
+        store.save(SampleData("c", 3.0))
+
+        # Exact match
+        assert store.find_closest(2.0) == SampleData("b", 2.0)
+
+        # Closest to 1.4 is 1.0
+        assert store.find_closest(1.4) == SampleData("a", 1.0)
+
+        # Closest to 1.6 is 2.0
+        assert store.find_closest(1.6) == SampleData("b", 2.0)
+
+        # With tolerance
+        assert store.find_closest(1.4, tolerance=0.5) == SampleData("a", 1.0)
+        assert store.find_closest(1.4, tolerance=0.3) is None
+
+    def test_find_closest_seek(self, store_factory, store_name, temp_dir):
+        store = store_factory(temp_dir)
+        store.save(SampleData("a", 10.0))
+        store.save(SampleData("b", 11.0))
+        store.save(SampleData("c", 12.0))
+
+        # Seek 0 = first item (10.0)
+        assert store.find_closest_seek(0.0) == SampleData("a", 10.0)
+
+        # Seek 1.0 = 11.0
+        assert store.find_closest_seek(1.0) == SampleData("b", 11.0)
+
+        # Seek 1.4 -> closest to 11.4 is 11.0
+        assert store.find_closest_seek(1.4) == SampleData("b", 11.0)
+
+        # Seek 1.6 -> closest to 11.6 is 12.0
+        assert store.find_closest_seek(1.6) == SampleData("c", 12.0)
+
+        # With tolerance
+        assert store.find_closest_seek(1.4, tolerance=0.5) == SampleData("b", 11.0)
+        assert store.find_closest_seek(1.4, tolerance=0.3) is None
+
+    def test_iterate(self, store_factory, store_name, temp_dir):
+        store = store_factory(temp_dir)
+        store.save(SampleData("a", 1.0))
+        store.save(SampleData("c", 3.0))
+        store.save(SampleData("b", 2.0))
+
+        # Should iterate in timestamp order, returning data only (not tuples)
+        items = list(store.iterate())
+        assert items == [
+            SampleData("a", 1.0),
+            SampleData("b", 2.0),
+            SampleData("c", 3.0),
+        ]
+
+    def test_iterate_with_seek_and_duration(self, store_factory, store_name, temp_dir):
+        store = store_factory(temp_dir)
+        store.save(SampleData("a", 10.0))
+        store.save(SampleData("b", 11.0))
+        store.save(SampleData("c", 12.0))
+        store.save(SampleData("d", 13.0))
+
+        # Seek from start
+        items = list(store.iterate(seek=1.0))
+        assert items == [
+            SampleData("b", 11.0),
+            SampleData("c", 12.0),
+            SampleData("d", 13.0),
+        ]
+
+        # Duration
+        items = list(store.iterate(duration=2.0))
+        assert items == [SampleData("a", 10.0), SampleData("b", 11.0)]
+
+        # Seek + duration
+        items = list(store.iterate(seek=1.0, duration=2.0))
+        assert items == [SampleData("b", 11.0), SampleData("c", 12.0)]
+
+        # from_timestamp
+        items = list(store.iterate(from_timestamp=12.0))
+        assert items == [SampleData("c", 12.0), SampleData("d", 13.0)]
+
+    def test_variadic_save(self, store_factory, store_name, temp_dir):
+        store = store_factory(temp_dir)
+
+        # Save multiple items at once
+        store.save(
+            SampleData("a", 1.0),
+            SampleData("b", 2.0),
+            SampleData("c", 3.0),
+        )
+
+        assert store.load(1.0) == SampleData("a", 1.0)
+        assert store.load(2.0) == SampleData("b", 2.0)
+        assert store.load(3.0) == SampleData("c", 3.0)
+
+    def test_pipe_save(self, store_factory, store_name, temp_dir):
+        import reactivex as rx
+
+        store = store_factory(temp_dir)
+
+        # Create observable with test data
+        source = rx.of(
+            SampleData("a", 1.0),
+            SampleData("b", 2.0),
+            SampleData("c", 3.0),
+        )
+
+        # Pipe through store.pipe_save - should save and pass through
+        results: list[SampleData] = []
+        source.pipe(store.pipe_save).subscribe(results.append)
+
+        # Data should be saved
+        assert store.load(1.0) == SampleData("a", 1.0)
+        assert store.load(2.0) == SampleData("b", 2.0)
+        assert store.load(3.0) == SampleData("c", 3.0)
+
+        # Data should also pass through
+        assert results == [
+            SampleData("a", 1.0),
+            SampleData("b", 2.0),
+            SampleData("c", 3.0),
+        ]
+
+    def test_consume_stream(self, store_factory, store_name, temp_dir):
+        import reactivex as rx
+
+        store = store_factory(temp_dir)
+
+        # Create observable with test data
+        source = rx.of(
+            SampleData("a", 1.0),
+            SampleData("b", 2.0),
+            SampleData("c", 3.0),
+        )
+
+        # Consume stream - should save all items
+        disposable = store.consume_stream(source)
+
+        # Data should be saved
+        assert store.load(1.0) == SampleData("a", 1.0)
+        assert store.load(2.0) == SampleData("b", 2.0)
+        assert store.load(3.0) == SampleData("c", 3.0)
+
+        disposable.dispose()
+
+    def test_stream_basic(self, store_factory, store_name, temp_dir):
+        store = store_factory(temp_dir)
+        store.save(SampleData("a", 1.0))
+        store.save(SampleData("b", 2.0))
+        store.save(SampleData("c", 3.0))
+
+        # Stream at high speed (essentially instant)
+        results: list[SampleData] = []
+        store.stream(speed=1000.0).subscribe(
+            on_next=results.append,
+            on_completed=lambda: None,
+        )
+
+        # Give it a moment to complete
+        import time
+
+        time.sleep(0.1)
+
+        assert results == [
+            SampleData("a", 1.0),
+            SampleData("b", 2.0),
+            SampleData("c", 3.0),
+        ]

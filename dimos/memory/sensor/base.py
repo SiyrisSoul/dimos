@@ -16,11 +16,11 @@
 from abc import ABC, abstractmethod
 import bisect
 from collections.abc import Iterator
-import threading
 import time
 from typing import Generic, TypeVar
 
 import reactivex as rx
+from reactivex import operators as ops
 from reactivex.disposable import CompositeDisposable, Disposable
 from reactivex.observable import Observable
 from reactivex.scheduler import TimeoutScheduler
@@ -63,9 +63,31 @@ class SensorStore(Generic[T], ABC):
         """Find closest timestamp. Backend can optimize (binary search, db index, etc.)."""
         ...
 
-    def save(self, data: T) -> None:
-        """Save timestamped data using its .ts attribute."""
-        self._save(data.ts, data)
+    def save(self, *data: T) -> None:
+        """Save one or more timestamped data items using their .ts attribute."""
+        for item in data:
+            self._save(item.ts, item)
+
+    def pipe_save(self, source: Observable[T]) -> Observable[T]:
+        """Operator for use with .pipe() - saves each item and passes through.
+
+        Usage:
+            observable.pipe(store.pipe_save).subscribe(...)
+        """
+
+        def _save_and_return(data: T) -> T:
+            self.save(data)
+            return data
+
+        return source.pipe(ops.map(_save_and_return))
+
+    def consume_stream(self, observable: Observable[T]) -> rx.abc.DisposableBase:
+        """Subscribe to an observable and save each item.
+
+        Usage:
+            disposable = store.consume_stream(observable)
+        """
+        return observable.subscribe(on_next=self.save)
 
     def load(self, timestamp: float) -> T | None:
         """Load data at exact timestamp."""
@@ -73,25 +95,25 @@ class SensorStore(Generic[T], ABC):
 
     def find_closest(
         self,
-        timestamp: float | None = None,
-        seek: float | None = None,
+        timestamp: float,
         tolerance: float | None = None,
     ) -> T | None:
-        """Find data closest to timestamp (absolute) or seek (relative to start)."""
-        if timestamp is None and seek is None:
-            raise ValueError("Must provide either timestamp or seek")
-
-        if seek is not None:
-            first = self.first_timestamp()
-            if first is None:
-                return None
-            timestamp = first + seek
-
-        assert timestamp is not None
+        """Find data closest to the given absolute timestamp."""
         closest_ts = self._find_closest_timestamp(timestamp, tolerance)
         if closest_ts is None:
             return None
         return self._load(closest_ts)
+
+    def find_closest_seek(
+        self,
+        relative_seconds: float,
+        tolerance: float | None = None,
+    ) -> T | None:
+        """Find data closest to a time relative to the start."""
+        first = self.first_timestamp()
+        if first is None:
+            return None
+        return self.find_closest(first + relative_seconds, tolerance)
 
     def first_timestamp(self) -> float | None:
         """Get the first timestamp in the store."""
@@ -99,21 +121,20 @@ class SensorStore(Generic[T], ABC):
             return ts
         return None
 
-    def iterate(self, loop: bool = False) -> Iterator[tuple[float, T]]:
-        """Iterate over (timestamp, data) pairs."""
-        while True:
-            yield from self._iter_items()
-            if not loop:
-                break
+    def first(self) -> T | None:
+        """Get the first data item in the store."""
+        for _, data in self._iter_items():
+            return data
+        return None
 
-    def iterate_ts(
+    def iterate(
         self,
         seek: float | None = None,
         duration: float | None = None,
         from_timestamp: float | None = None,
         loop: bool = False,
-    ) -> Iterator[tuple[float, T]]:
-        """Iterate with seek/duration options."""
+    ) -> Iterator[T]:
+        """Iterate over data items with optional seek/duration."""
         first = self.first_timestamp()
         if first is None:
             return
@@ -133,19 +154,29 @@ class SensorStore(Generic[T], ABC):
             end = start_ts + duration
 
         while True:
-            yield from self._iter_items(start=start, end=end)
+            for _, data in self._iter_items(start=start, end=end):
+                yield data
             if not loop:
                 break
 
-    def iterate_realtime(self, speed: float = 1.0, **kwargs: float | bool | None) -> Iterator[T]:
+    def iterate_realtime(
+        self,
+        speed: float = 1.0,
+        seek: float | None = None,
+        duration: float | None = None,
+        from_timestamp: float | None = None,
+        loop: bool = False,
+    ) -> Iterator[T]:
         """Iterate data, sleeping to match original timing."""
         prev_ts: float | None = None
-        for ts, data in self.iterate_ts(**kwargs):  # type: ignore[arg-type]
+        for data in self.iterate(
+            seek=seek, duration=duration, from_timestamp=from_timestamp, loop=loop
+        ):
             if prev_ts is not None:
-                delay = (ts - prev_ts) / speed
+                delay = (data.ts - prev_ts) / speed
                 if delay > 0:
                     time.sleep(delay)
-            prev_ts = ts
+            prev_ts = data.ts
             yield data
 
     def stream(
@@ -169,38 +200,36 @@ class SensorStore(Generic[T], ABC):
             disp = CompositeDisposable()
             is_disposed = False
 
-            iterator = self.iterate_ts(
+            iterator = self.iterate(
                 seek=seek, duration=duration, from_timestamp=from_timestamp, loop=loop
             )
 
             # Get first message
             try:
-                first_ts, first_data = next(iterator)
+                first_data = next(iterator)
             except StopIteration:
                 observer.on_completed()
                 return Disposable()
 
             # Establish timing reference (absolute time prevents drift)
             start_local_time = time.time()
-            start_replay_time = first_ts
+            start_replay_time = first_data.ts
 
             # Emit first sample immediately
             observer.on_next(first_data)
 
             # Pre-load next message
             try:
-                next_message: tuple[float, T] | None = next(iterator)
+                next_message: T | None = next(iterator)
             except StopIteration:
                 observer.on_completed()
                 return disp
 
-            def schedule_emission(message: tuple[float, T]) -> None:
+            def schedule_emission(data: T) -> None:
                 nonlocal next_message, is_disposed
 
                 if is_disposed:
                     return
-
-                ts, data = message
 
                 # Pre-load the following message while we have time
                 try:
@@ -209,7 +238,7 @@ class SensorStore(Generic[T], ABC):
                     next_message = None
 
                 # Calculate absolute emission time
-                target_time = start_local_time + (ts - start_replay_time) / speed
+                target_time = start_local_time + (data.ts - start_replay_time) / speed
                 delay = max(0.0, target_time - time.time())
 
                 def emit(

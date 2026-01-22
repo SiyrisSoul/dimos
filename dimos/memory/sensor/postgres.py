@@ -50,8 +50,8 @@ class PostgresStore(SensorStore[T], Resource):
         store.start()  # open connection
 
         # Use store
-        store.save(data, timestamp)
-        data = store.find_closest(seek=10.0)
+        store.save(data)  # uses data.ts for timestamp
+        data = store.find_closest_seek(10.0)
 
         # Cleanup
         store.stop()  # close connection
