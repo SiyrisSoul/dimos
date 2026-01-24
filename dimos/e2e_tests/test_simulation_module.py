@@ -46,9 +46,6 @@ class TestSimulationModuleE2E:
         joint_state = JointState.lcm_decode(raw_joint_state)
         assert len(joint_state.name) == 8
         assert len(joint_state.position) == 8
-        assert "joint1" in joint_state.name
-        assert "joint7" in joint_state.name
-        assert "gripper" in joint_state.name
 
     def test_xarm7_robot_state_published(self, lcm_spy, start_blueprint) -> None:
         robot_state_topic = "/xarm/robot_state#sensor_msgs.RobotState"

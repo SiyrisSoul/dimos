@@ -68,8 +68,10 @@ class SimManipInterface:
         """Disconnect from simulation."""
         try:
             return self._engine.disconnect()
-        finally:
+        except Exception as exc:
             self._connected = False
+            self.logger.error(f"Sim disconnection failed: {exc}")
+            return False
 
     def is_connected(self) -> bool:
         return bool(self._connected and self._engine.connected)
@@ -178,8 +180,8 @@ class SimManipInterface:
         pose: dict[str, float],
         velocity: float = 1.0,
     ) -> bool:
-        _ = pose
-        _ = velocity
+        _pose = pose
+        _velocity = velocity
         return False
 
     def read_gripper_position(self) -> float | None:
