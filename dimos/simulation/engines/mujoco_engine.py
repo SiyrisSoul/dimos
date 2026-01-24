@@ -105,7 +105,6 @@ class MujocoEngine(SimulationEngine):
                 targets = list(self._joint_velocity_targets)
             elif self._command_mode == "position":
                 targets = list(self._joint_position_targets)
-        with self._lock:
             for i, mapping in enumerate(self._joint_mappings):
                 if mapping.actuator_id is None:
                     continue
@@ -263,21 +262,30 @@ class MujocoEngine(SimulationEngine):
             return
 
     def _set_position_targets(self, positions: list[float]) -> None:
+        if len(positions) > self._num_joints:
+            raise ValueError(
+                f"Position command has {len(positions)} joints, expected at most {self._num_joints}"
+            )
         with self._lock:
-            limit = min(len(positions), self._num_joints)
-            for i in range(limit):
+            for i in range(len(positions)):
                 self._joint_position_targets[i] = float(positions[i])
 
     def _set_velocity_targets(self, velocities: list[float]) -> None:
+        if len(velocities) > self._num_joints:
+            raise ValueError(
+                f"Velocity command has {len(velocities)} joints, expected at most {self._num_joints}"
+            )
         with self._lock:
-            limit = min(len(velocities), self._num_joints)
-            for i in range(limit):
+            for i in range(len(velocities)):
                 self._joint_velocity_targets[i] = float(velocities[i])
 
     def _set_effort_targets(self, efforts: list[float]) -> None:
+        if len(efforts) > self._num_joints:
+            raise ValueError(
+                f"Effort command has {len(efforts)} joints, expected at most {self._num_joints}"
+            )
         with self._lock:
-            limit = min(len(efforts), self._num_joints)
-            for i in range(limit):
+            for i in range(len(efforts)):
                 self._joint_effort_targets[i] = float(efforts[i])
 
     def hold_current_position(self) -> None:
