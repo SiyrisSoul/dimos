@@ -31,6 +31,7 @@ from dimos.core.module import Module
 from dimos.core.module_coordinator import ModuleCoordinator
 from dimos.core.stream import In, Out
 from dimos.core.transport import LCMTransport, pLCMTransport
+from dimos.spec.utils import get_protocol_method_signatures, is_spec
 from dimos.utils.generic import short_id
 from dimos.utils.logging_config import setup_logger
 
@@ -38,22 +39,30 @@ logger = setup_logger()
 
 
 @dataclass(frozen=True)
-class Stream:
+class StreamRef:
     name: str
     type: type
     direction: Literal["in", "out"]
 
 
 @dataclass(frozen=True)
+class ModuleRef:
+    name: str
+    rpc_method_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class _BlueprintAtom:
     module: type[Module]
-    connections: tuple[Stream, ...]
+    connections: tuple[StreamRef, ...]
+    module_refs: tuple["ModuleRef", ...] = ()
     args: tuple[Any]
     kwargs: dict[str, Any]
 
     @staticmethod
     def create(module: type[Module], args: tuple[Any], kwargs: dict[str, Any]) -> Self:
-        connections: list[Stream] = []
+        connections: list[StreamRef] = []
+        module_refs: list[ModuleRef] = []
 
         # Use get_type_hints() to properly resolve string annotations.
         try:
@@ -67,14 +76,28 @@ class _BlueprintAtom:
 
         for name, annotation in all_annotations.items():
             origin = get_origin(annotation)
-            if origin not in (In, Out):
-                continue
-            direction = "in" if origin == In else "out"
-            type_ = get_args(annotation)[0]
-            connections.append(Stream(name=name, type=type_, direction=direction))  # type: ignore[arg-type]
+            # Streams
+            if origin in (In, Out):
+                direction = "in" if origin == In else "out"
+                type_ = get_args(annotation)[0]
+                connections.append(
+                    StreamRef(name=name, type=type_, direction=direction)  # type: ignore[arg-type]
+                )
+            # linking to unknown module via Spec
+            elif is_spec(annotation):
+                rpc_method_names = tuple(get_protocol_method_signatures(annotation).keys())
+                module_refs.append(ModuleRef(name=name, rpc_method_names=rpc_method_names))
+            # linking to specific/known module directly
+            elif isinstance(getattr(module, name, None), Module):
+                other_module = getattr(module, name)
+                module_refs.append(ModuleRef(name=name, rpc_method_names=other_module.rpc_calls))
 
         return _BlueprintAtom(
-            module=module, connections=tuple(connections), args=args, kwargs=kwargs
+            module=module,
+            connections=tuple(connections),
+            module_refs=tuple(module_refs),
+            args=args,
+            kwargs=kwargs,
         )
 
 

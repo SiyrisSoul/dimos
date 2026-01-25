@@ -21,7 +21,7 @@ from dimos.core._test_future_annotations_helper import (
 )
 from dimos.core.blueprints import (
     Blueprint,
-    Stream,
+    StreamRef,
     _BlueprintAtom,
     autoconnect,
 )
@@ -106,8 +106,8 @@ def test_get_connection_set() -> None:
     assert _BlueprintAtom.create(CatModule, args=("arg1"), kwargs={"k": "v"}) == _BlueprintAtom(
         module=CatModule,
         connections=(
-            Stream(name="pet_cat", type=Petting, direction="in"),
-            Stream(name="scratches", type=Scratch, direction="out"),
+            StreamRef(name="pet_cat", type=Petting, direction="in"),
+            StreamRef(name="scratches", type=Scratch, direction="out"),
         ),
         args=("arg1"),
         kwargs={"k": "v"},
@@ -122,8 +122,8 @@ def test_autoconnect() -> None:
             _BlueprintAtom(
                 module=ModuleA,
                 connections=(
-                    Stream(name="data1", type=Data1, direction="out"),
-                    Stream(name="data2", type=Data2, direction="out"),
+                    StreamRef(name="data1", type=Data1, direction="out"),
+                    StreamRef(name="data2", type=Data2, direction="out"),
                 ),
                 args=(),
                 kwargs={},
@@ -131,9 +131,9 @@ def test_autoconnect() -> None:
             _BlueprintAtom(
                 module=ModuleB,
                 connections=(
-                    Stream(name="data1", type=Data1, direction="in"),
-                    Stream(name="data2", type=Data2, direction="in"),
-                    Stream(name="data3", type=Data3, direction="out"),
+                    StreamRef(name="data1", type=Data1, direction="in"),
+                    StreamRef(name="data2", type=Data2, direction="in"),
+                    StreamRef(name="data3", type=Data3, direction="out"),
                 ),
                 args=(),
                 kwargs={},
@@ -341,11 +341,11 @@ def test_future_annotations_support() -> None:
     # Test that connections are properly extracted from modules with future annotations
     out_blueprint = _BlueprintAtom.create(FutureModuleOut, args=(), kwargs={})
     assert len(out_blueprint.connections) == 1
-    assert out_blueprint.connections[0] == Stream(name="data", type=FutureData, direction="out")
+    assert out_blueprint.connections[0] == StreamRef(name="data", type=FutureData, direction="out")
 
     in_blueprint = _BlueprintAtom.create(FutureModuleIn, args=(), kwargs={})
     assert len(in_blueprint.connections) == 1
-    assert in_blueprint.connections[0] == Stream(name="data", type=FutureData, direction="in")
+    assert in_blueprint.connections[0] == StreamRef(name="data", type=FutureData, direction="in")
 
 
 @pytest.mark.integration
