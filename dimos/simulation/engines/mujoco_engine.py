@@ -159,11 +159,8 @@ class MujocoEngine(SimulationEngine):
                     return True
 
                 self._shm = ShmWriter(self._num_joints)
-                if sys.platform == "darwin":
-                    mjpython = Path(sys.executable).with_name("mjpython")
-                    executable = str(mjpython) if mjpython.exists() else "mjpython"
-                else:
-                    executable = sys.executable
+                mjpython = Path(sys.executable).with_name("mjpython")
+                executable = str(mjpython) if mjpython.exists() else "mjpython"
                 args = [
                     executable,
                     str(LAUNCHER_PATH),
