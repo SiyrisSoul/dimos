@@ -61,11 +61,9 @@ class LCMPubSubBase(LCMService, PubSub[Topic, Any]):
     default_config = LCMConfig
     _stop_event: threading.Event
     _thread: threading.Thread | None
-    _callbacks: dict[str, list[Callable[[Any], None]]]
 
     def __init__(self, **kwargs) -> None:  # type: ignore[no-untyped-def]
         super().__init__(**kwargs)
-        self._callbacks = {}
 
     def publish(self, topic: Topic, message: bytes) -> None:
         """Publish a message to the specified channel."""
@@ -89,33 +87,6 @@ class LCMPubSubBase(LCMService, PubSub[Topic, Any]):
         lcm_subscription = self.l.subscribe(str(topic), lambda _, msg: callback(msg, topic))
 
         # Set queue capacity to 10000 to handle high-volume bursts
-        lcm_subscription.set_queue_capacity(10000)
-
-        def unsubscribe() -> None:
-            if self.l is None:
-                return
-            self.l.unsubscribe(lcm_subscription)
-
-        return unsubscribe
-
-    def subscribe_regex(
-        self,
-        pattern: re.Pattern[str],
-        callback: Callable[[bytes, str], Any],
-    ) -> Callable[[], None]:
-        """Subscribe to channels matching a regex pattern.
-
-        Note: Callback receives raw bytes and the channel string (not Topic),
-        since we don't know the message type for pattern subscriptions.
-        """
-        if self.l is None:
-            logger.error("Tried to subscribe after LCM was closed")
-            return lambda: None
-
-        # LCM subscribe accepts regex string directly
-        lcm_subscription = self.l.subscribe(
-            pattern.pattern, lambda channel, msg: callback(msg, channel)
-        )
         lcm_subscription.set_queue_capacity(10000)
 
         def unsubscribe() -> None:
