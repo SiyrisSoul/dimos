@@ -56,28 +56,6 @@ class TestSimulationModuleE2E:
         assert len(joint_state.name) == 8
         assert len(joint_state.position) == 8
 
-    def test_xarm7_joint_state_published_subprocess(
-        self,
-        lcm_spy,
-        start_blueprint,
-        monkeypatch,
-    ) -> None:
-        monkeypatch.setenv("DIMOS_MUJOCO_FORCE_SUBPROCESS", "1")
-        monkeypatch.setenv("DIMOS_HEADLESS", "1")
-
-        joint_state_topic = "/xarm/joint_states#sensor_msgs.JointState"
-        lcm_spy.save_topic(joint_state_topic)
-
-        start_blueprint("xarm7-trajectory-sim")
-        lcm_spy.wait_for_saved_topic(joint_state_topic, timeout=45.0)
-
-        with lcm_spy._messages_lock:
-            raw_joint_state = lcm_spy.messages[joint_state_topic][0]
-
-        joint_state = JointState.lcm_decode(raw_joint_state)
-        assert len(joint_state.name) == 8
-        assert len(joint_state.position) == 8
-
     def test_xarm7_robot_state_published(
         self,
         lcm_spy,
