@@ -116,7 +116,6 @@ class GraspGenModule(Module[GraspGenConfig]):
 
             # Convert and publish results
             pose_array = self._grasps_to_pose_array(grasps, scores, pointcloud.frame_id)
-            logger.info(f"Generated {len(pose_array.poses)} grasps in {(time.time() - start_time) * 1000:.0f}ms")
             self.grasps.publish(pose_array)
 
             if self.config.save_visualization_data:

@@ -24,27 +24,6 @@ from dimos.perception.detection.detectors.yoloe import YoloePromptMode
 from dimos.perception.object_scene_registration import object_scene_registration_module
 from dimos.robot.foxglove_bridge import foxglove_bridge
 
-USE_EYE_IN_HAND = False
-
-if USE_EYE_IN_HAND:
-    # Eye-in-hand: Camera mounted on end-effector
-    from dimos.hardware.sensors.camera.calibration import load_eye_in_hand_calibration
-
-    eef_to_camera = load_eye_in_hand_calibration(
-        robot_type="xarm6",
-        camera_type="realsense",
-    )
-    camera_module = realsense_camera(
-        base_frame_id="eef",
-        base_transform=eef_to_camera,
-        enable_pointcloud=False,
-    )
-    target_frame = "world"  # Transform to world for grasp execution
-else:
-    # Fixed camera: Camera on tripod
-    camera_module = realsense_camera(enable_pointcloud=False)
-    target_frame = "base_link"
-
 demo_perception_grasping = autoconnect(
     camera_module,
     object_scene_registration_module(target_frame=target_frame, prompt_mode=YoloePromptMode.PROMPT),

@@ -180,11 +180,6 @@ def humancli(ctx: typer.Context) -> None:
 topic_app = typer.Typer(help="Topic commands for pub/sub")
 main.add_typer(topic_app, name="topic")
 
-# Docker conversion commands
-from dimos.robot.cli.dockerize import app as docker_app
-
-main.add_typer(docker_app, name="docker")
-
 
 @topic_app.command()
 def echo(
