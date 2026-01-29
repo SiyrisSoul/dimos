@@ -70,7 +70,9 @@ class Topic:
         """Get messages within the specified time window"""
         current_time = time.time()
         cutoff_time = current_time - time_window
-        return [(ts, size) for ts, size in self.message_history if ts >= cutoff_time]
+        # Create a snapshot to avoid RuntimeError: deque mutated during iteration
+        messages_snapshot = list(self.message_history)
+        return [(ts, size) for ts, size in messages_snapshot if ts >= cutoff_time]
 
     # avg msg freq in the last n seconds
     def freq(self, time_window: float) -> float:
