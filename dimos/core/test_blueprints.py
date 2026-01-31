@@ -389,6 +389,14 @@ class CalculatorSpec(Spec, Protocol):
     @rpc
     def compute2(self, a: float, b: float) -> float: ...
 
+    @rpc
+    def start(self) -> None:
+        super().start()
+
+    @rpc
+    def stop(self) -> None:
+        super().stop()
+
 
 class Calculator1(Module):
     @rpc
@@ -400,10 +408,12 @@ class Calculator1(Module):
         return a + b
 
     @rpc
-    def start(self) -> None: ...
+    def start(self) -> None:
+        super().start()
 
     @rpc
-    def stop(self) -> None: ...
+    def stop(self) -> None:
+        super().stop()
 
 
 class Calculator2(Module):
@@ -416,10 +426,12 @@ class Calculator2(Module):
         return a * b
 
     @rpc
-    def start(self) -> None: ...
+    def start(self) -> None:
+        super().start()
 
     @rpc
-    def stop(self) -> None: ...
+    def stop(self) -> None:
+        super().stop()
 
 
 # link to a specific module
@@ -432,7 +444,8 @@ class Mod1(Module):
         _ = self.calc.compute1
 
     @rpc
-    def stop(self) -> None: ...
+    def stop(self) -> None:
+        super().stop()
 
 
 # link to any module that implements a spec (Autoconnect will handle it)
@@ -445,7 +458,8 @@ class Mod2(Module):
         _ = self.calc.compute1
 
     @rpc
-    def stop(self) -> None: ...
+    def stop(self) -> None:
+        super().stop()
 
 
 @pytest.mark.integration
@@ -503,3 +517,13 @@ def test_module_ref_remap_ambiguous() -> None:
         assert mod2.calc.compute2(2.0, 3.0) == 5.0
     finally:
         coordinator.stop()
+
+
+@pytest.mark.integration
+def test_module_ref_spec_ambiguous_error() -> None:
+    with pytest.raises(Exception):
+        autoconnect(
+            Calculator1.blueprint(),
+            Calculator2.blueprint(),
+            Mod2.blueprint(),
+        ).build(**_BUILD_WITHOUT_RERUN)
