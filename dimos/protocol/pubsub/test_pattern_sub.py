@@ -26,7 +26,8 @@ import pytest
 
 from dimos.msgs.geometry_msgs import Pose, Quaternion, Vector3
 from dimos.protocol.pubsub.impl.lcmpubsub import LCM, LCMPubSubBase, Topic
-from dimos.protocol.pubsub.spec import AllPubSub, Glob, PubSub
+from dimos.protocol.pubsub.patterns import Glob
+from dimos.protocol.pubsub.spec import AllPubSub, PubSub
 
 TopicT = TypeVar("TopicT")
 MsgT = TypeVar("MsgT")

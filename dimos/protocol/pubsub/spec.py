@@ -25,74 +25,6 @@ MsgT_co = TypeVar("MsgT_co", covariant=True)
 TopicT_co = TypeVar("TopicT_co", covariant=True)
 
 
-class Glob:
-    """Glob pattern that compiles to regex
-
-    Supports:
-        * - matches any characters except /
-        ** - matches any characters including /
-        ? - matches single character
-
-    Example:
-        Topic(topic=Glob("/sensor/*"))  # matches /sensor/temp, /sensor/humidity
-        Topic(topic=Glob("/robot/**"))  # matches /robot/arm/joint1, /robot/leg/motor
-    """
-
-    def __init__(self, pattern: str) -> None:
-        self._glob = pattern
-        self._regex = self._compile(pattern)
-
-    @staticmethod
-    def _compile(pattern: str) -> str:
-        """Convert glob pattern to regex."""
-        result = []
-        i = 0
-        while i < len(pattern):
-            c = pattern[i]
-            if c == "*":
-                if i + 1 < len(pattern) and pattern[i + 1] == "*":
-                    result.append(".*")
-                    i += 2
-                else:
-                    result.append("[^/]*")
-                    i += 1
-            elif c == "?":
-                result.append(".")
-                i += 1
-            elif c in r"\^$.|+[]{}()":
-                result.append("\\" + c)
-                i += 1
-            else:
-                result.append(c)
-                i += 1
-        return "".join(result)
-
-    @property
-    def pattern(self) -> str:
-        """Return the regex pattern string."""
-        return self._regex
-
-    @property
-    def glob(self) -> str:
-        """Return the original glob pattern."""
-        return self._glob
-
-    def __repr__(self) -> str:
-        return f"Glob({self._glob!r})"
-
-
-@runtime_checkable
-class SubscribeAllCapable(Protocol[MsgT_co, TopicT_co]):
-    """Protocol for pubsubs that support subscribe_all.
-
-    Both AllPubSub (native) and DiscoveryPubSub (synthesized) satisfy this.
-    """
-
-    def subscribe_all(self, callback: Callable[[Any, Any], Any]) -> Callable[[], None]:
-        """Subscribe to all topics."""
-        ...
-
-
 class PubSubBaseMixin(Generic[TopicT, MsgT]):
     """Mixin class providing sugar methods for PubSub implementations.
     Depends on the basic publish and subscribe methods being implemented.
@@ -245,3 +177,15 @@ class DiscoveryPubSub(PubSub[TopicT, MsgT], ABC):
                 unsub()
 
         return unsubscribe_all
+
+
+@runtime_checkable
+class AllSubscribable(Protocol[MsgT_co, TopicT_co]):
+    """Protocol for pubsubs that support subscribe_all.
+
+    Both AllPubSub (native) and DiscoveryPubSub (synthesized) satisfy this.
+    """
+
+    def subscribe_all(self, callback: Callable[[Any, Any], Any]) -> Callable[[], None]:
+        """Subscribe to all topics."""
+        ...

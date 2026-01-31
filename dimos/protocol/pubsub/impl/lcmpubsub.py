@@ -23,7 +23,8 @@ from dimos.protocol.pubsub.encoders import (
     LCMEncoderMixin,
     PickleEncoderMixin,
 )
-from dimos.protocol.pubsub.spec import AllPubSub, Glob
+from dimos.protocol.pubsub.patterns import Glob
+from dimos.protocol.pubsub.spec import AllPubSub
 from dimos.protocol.service.lcmservice import LCMConfig, LCMService, autoconf
 from dimos.utils.logging_config import setup_logger
 
