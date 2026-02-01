@@ -17,7 +17,7 @@ from __future__ import annotations
 from enum import IntEnum
 from functools import lru_cache
 import time
-from typing import TYPE_CHECKING, Any, BinaryIO
+from typing import TYPE_CHECKING, BinaryIO
 
 from dimos_lcm.nav_msgs import (
     MapMetaData,
@@ -427,51 +427,6 @@ class OccupancyGrid(Timestamped):
 
         return int(self.grid[y, x])
 
-    def to_rerun(
-        self,
-        colormap: str | None = None,
-        mode: str = "mesh",
-        z_offset: float = 0.01,
-        opacity: float = 1.0,
-        cost_range: tuple[int, int] | None = None,
-        background: str | None = None,
-        **kwargs: Any,
-    ) -> Archetype:
-        """Convert to Rerun visualization format.
-
-        Args:
-            colormap: Optional colormap name (e.g., "RdBu_r" for blue=free, red=occupied).
-                     If None, uses grayscale for image mode or default colors for mesh mode.
-            mode: Visualization mode:
-                - "image": 2D grayscale/colored image
-                - "mesh": 3D textured plane overlay on floor (default)
-            z_offset: Height offset for mesh mode (default 0.01m above floor)
-            opacity: Blend factor (0.0 to 1.0). Blends costmap colors towards background color.
-            cost_range: Optional (min, max) cost range to display. Cells outside range use background.
-            background: Hex color for background/out-of-range cells (e.g. "#484981"). Default is black.
-            **kwargs: Additional args (ignored for compatibility)
-
-        Returns:
-            Rerun archetype for logging (rr.Image or rr.Mesh3D)
-
-        The visualization uses:
-        - Free space (value 0): white/blue
-        - Unknown space (value -1): gray/transparent
-        - Occupied space (value > 0): black/red with gradient
-        """
-        import rerun as rr
-
-        if self.grid.size == 0:
-            if mode == "mesh":
-                return rr.Mesh3D(vertex_positions=[])
-            else:
-                return rr.Image(np.zeros((1, 1), dtype=np.uint8), color_model="L")
-
-        if mode == "mesh":
-            return self._to_rerun_mesh(colormap, z_offset, opacity, cost_range, background)
-        else:
-            return self._to_rerun_image(colormap, opacity, cost_range)
-
     def _generate_rgba_texture(
         self,
         colormap: str | None = None,
@@ -574,63 +529,7 @@ class OccupancyGrid(Timestamped):
 
         return vis
 
-    def _to_rerun_image(
-        self,
-        colormap: str | None = None,
-        opacity: float = 1.0,
-        cost_range: tuple[int, int] | None = None,
-    ) -> Archetype:
-        """Convert to 2D image visualization."""
-        import rerun as rr
-
-        # Use existing cached visualization functions for supported palettes
-        if colormap in ("turbo", "rainbow"):
-            from dimos.mapping.occupancy.visualizations import rainbow_image, turbo_image
-
-            if colormap == "turbo":
-                bgr_image = turbo_image(self.grid)
-            else:
-                bgr_image = rainbow_image(self.grid)
-
-            # Convert BGR to RGB, apply opacity, and flip for world coordinates
-            rgb_image = (np.flipud(bgr_image[:, :, ::-1]) * opacity).astype(np.uint8)
-
-            # Apply cost_range filter for turbo/rainbow
-            if cost_range is not None:
-                in_range = (self.grid >= cost_range[0]) & (self.grid <= cost_range[1])
-                rgba_image = np.zeros((rgb_image.shape[0], rgb_image.shape[1], 4), dtype=np.uint8)
-                rgba_image[:, :, :3] = rgb_image
-                rgba_image[:, :, 3] = 255
-                rgba_image[np.flipud(~in_range), 3] = 0  # Flip mask to match flipped image
-                return rr.Image(rgba_image, color_model="RGBA")
-
-            return rr.Image(rgb_image, color_model="RGB")
-
-        if colormap is not None:
-            # Use helper and flip for image display
-            rgba = self._generate_rgba_texture(colormap, opacity, cost_range)
-            return rr.Image(np.flipud(rgba), color_model="RGBA")
-
-        # Grayscale visualization (no colormap)
-        vis_gray = np.zeros((self.height, self.width), dtype=np.uint8)
-
-        # Free space = white
-        vis_gray[self.grid == 0] = 255
-
-        # Unknown = gray
-        vis_gray[self.grid == -1] = 128
-
-        # Occupied (100) = black, costs (1-99) = gradient
-        occupied_mask = self.grid > 0
-        if np.any(occupied_mask):
-            # Map 1-100 to 127-0 (darker = more occupied)
-            costs = self.grid[occupied_mask].astype(np.float32)
-            vis_gray[occupied_mask] = (127 * (1 - costs / 100)).astype(np.uint8)
-
-        # Flip vertically to match world coordinates (y=0 at bottom)
-        return rr.Image(np.flipud(vis_gray), color_model="L")
-
-    def _to_rerun_mesh(
+    def to_rerun(
         self,
         colormap: str | None = None,
         z_offset: float = 0.01,
