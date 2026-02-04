@@ -107,12 +107,12 @@ class GraspingModule(SkillModule):
                 get_pc = self.get_rpc_calls(
                     "ObjectSceneRegistrationModule.get_object_pointcloud_by_object_id"
                 )
-                return get_pc(object_id)
+                return get_pc(object_id)  # type: ignore[no-any-return]
 
             get_pc = self.get_rpc_calls(
                 "ObjectSceneRegistrationModule.get_object_pointcloud_by_name"
             )
-            return get_pc(object_name)
+            return get_pc(object_name)  # type: ignore[no-any-return]
         except Exception as e:
             logger.error(f"Failed to get object pointcloud: {e}")
             return None
@@ -125,7 +125,7 @@ class GraspingModule(SkillModule):
             get_scene = self.get_rpc_calls(
                 "ObjectSceneRegistrationModule.get_full_scene_pointcloud"
             )
-            return get_scene(exclude_object_id=exclude_object_id)
+            return get_scene(exclude_object_id=exclude_object_id)  # type: ignore[no-any-return]
         except Exception as e:
             logger.debug(f"Could not get scene pointcloud: {e}")
             return None

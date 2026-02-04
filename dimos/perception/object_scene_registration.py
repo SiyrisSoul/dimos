@@ -17,8 +17,9 @@ from typing import Any
 
 import cv2
 import numpy as np
-import open3d as o3d
 from numpy.typing import NDArray
+
+import open3d as o3d  # type: ignore[import-untyped]
 
 from dimos.core import In, Out, rpc
 from dimos.core.skill_module import SkillModule
@@ -132,7 +133,7 @@ class ObjectSceneRegistrationModule(SkillModule):
         return [obj.track_id for obj in self._object_db.get_all_objects()]
 
     @rpc
-    def get_detected_objects(self) -> list[dict]:
+    def get_detected_objects(self) -> list[dict[str, Any]]:
         """Get all detected objects with object_id (UUID) and name."""
         return [obj.agent_encode() for obj in self._object_db.get_all_objects()]
 
@@ -164,10 +165,10 @@ class ObjectSceneRegistrationModule(SkillModule):
 
             mask = obj.mask.astype(np.uint8)
             if mask.max() == 1:
-                mask = mask * 255
+                mask = (mask * 255).astype(np.uint8)
 
             kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
-            return cv2.dilate(mask, kernel)
+            return cv2.dilate(mask, kernel).astype(np.uint8)
 
         return None
 

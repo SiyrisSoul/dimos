@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 
-from typing import List
+from typing import Iterator, List
 
 from dimos.msgs.geometry_msgs.Pose import Pose
 from dimos.msgs.std_msgs.Header import Header
@@ -61,7 +61,7 @@ class PoseArray:
         """Get pose at index."""
         return self.poses[index]
     
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Pose]:
         """Iterate over poses."""
         return iter(self.poses)
     

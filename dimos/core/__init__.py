@@ -108,7 +108,7 @@ def patchdask(dask_client: Client, local_cluster: LocalCluster) -> DimosCluster:
             dm = DockerModule(actor_class, *args, **kwargs)
             dm.start()  # Explicit start - follows create -> configure -> start lifecycle
             dask_client._docker_modules.append(dm)  # type: ignore[attr-defined]
-            return dm
+            return dm  # type: ignore[return-value]
 
         logger.info("Deploying module.", module=actor_class.__name__)
         actor = dask_client.submit(  # type: ignore[no-untyped-call]

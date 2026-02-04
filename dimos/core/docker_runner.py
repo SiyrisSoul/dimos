@@ -215,7 +215,7 @@ class DockerModule:
         # Signal remote module, stop RPC, unsubscribe handlers (ignore failures)
         with suppress(Exception):
             if self._running:
-                self.rpc.call_nowait(f"{self.remote_name}/stop", ((), {}))
+                self.rpc.call_nowait(f"{self.remote_name}/stop", ([], {}))
         with suppress(Exception):
             self.rpc.stop()
         for unsub in self._unsub_fns:
@@ -244,12 +244,14 @@ class DockerModule:
     def set_transport(self, stream_name: str, transport: Any) -> bool:
         """Configure stream transport in container. Mirrors DaskModule.set_transport() for autoconnect()."""
         topic = getattr(transport, "topic", None)
+        if topic is None:
+            return False
         if hasattr(topic, "topic"):
             topic = topic.topic
         result, _ = self.rpc.call_sync(
-            f"{self.remote_name}/configure_stream", ((stream_name, str(topic)), {})
+            f"{self.remote_name}/configure_stream", ([stream_name, str(topic)], {})
         )
-        return result
+        return bool(result)
 
     def __getattr__(self, name: str) -> Any:
         if name in self.rpcs:
@@ -387,7 +389,7 @@ class DockerModule:
                 raise RuntimeError(f"Container died during startup:\n{logs}")
 
             try:
-                self.rpc.call_sync(f"{self.remote_name}/start", ((), {}), rpc_timeout=RPC_READY_TIMEOUT)
+                self.rpc.call_sync(f"{self.remote_name}/start", ([], {}), rpc_timeout=RPC_READY_TIMEOUT)
                 elapsed = time.time() - start_time
                 logger.info(f"{self.remote_name} ready ({elapsed:.1f}s)")
                 return

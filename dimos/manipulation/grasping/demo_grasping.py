@@ -32,7 +32,7 @@ demo_grasping = autoconnect(
     graspgen(
         docker_file_path=Path(__file__).parent / "docker_context" / "Dockerfile",
         docker_build_context=Path(__file__).parent.parent.parent.parent,  # repo root
-        gripper_type="robotiq_2f_140",
+        gripper_type="robotiq_2f_140", # out of the bosx ships "robotiq_2f_140", "franka_panda", "single_suction_cup_30mm
         num_grasps=400,
         topk_num_grasps=100,
         filter_collisions=False,

@@ -19,8 +19,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 import numpy as np
+from dimos.core.core import rpc
 from dimos.core.docker_runner import DockerModuleConfig
-from dimos.core.module import Module, rpc
+from dimos.core.module import Module
 from dimos.core.stream import Out
 from dimos.msgs.geometry_msgs import PoseArray
 from dimos.msgs.sensor_msgs import PointCloud2
@@ -124,9 +125,9 @@ class GraspGenModule(Module[GraspGenConfig]):
                 sys.path.insert(0, graspgen_path)
             os.environ["PYOPENGL_PLATFORM"] = "egl"
 
-            # Load model and gripper
-            from grasp_gen.grasp_server import GraspGenSampler, load_grasp_cfg
-            from grasp_gen.robot import get_gripper_info
+            # Load model and gripper (Docker-only imports)
+            from grasp_gen.grasp_server import GraspGenSampler, load_grasp_cfg  # type: ignore[import-not-found]
+            from grasp_gen.robot import get_gripper_info  # type: ignore[import-not-found]
 
             grasp_cfg = load_grasp_cfg(self._get_gripper_config_path())
             self._sampler = GraspGenSampler(grasp_cfg)
@@ -153,15 +154,15 @@ class GraspGenModule(Module[GraspGenConfig]):
         return os.path.join(graspgen_path, "checkpoints", config_name)
 
     def _run_inference(
-        self, object_pc: np.ndarray, scene_pc: np.ndarray | None = None
-    ) -> tuple[np.ndarray, np.ndarray]:
+        self, object_pc: np.ndarray[Any, Any], scene_pc: np.ndarray[Any, Any] | None = None
+    ) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any]]:
         if self._sampler is None:
             return np.array([]), np.array([])
 
-        import torch
-        import trimesh.transformations as tra
-        from grasp_gen.grasp_server import GraspGenSampler
-        from grasp_gen.utils.point_cloud_utils import filter_colliding_grasps, point_cloud_outlier_removal
+        import torch  # type: ignore[import-not-found]
+        import trimesh.transformations as tra  # type: ignore[import-not-found]
+        from grasp_gen.grasp_server import GraspGenSampler  # type: ignore[import-not-found]
+        from grasp_gen.utils.point_cloud_utils import filter_colliding_grasps, point_cloud_outlier_removal  # type: ignore[import-not-found]
 
         pc_torch = torch.from_numpy(object_pc)
 
@@ -211,19 +212,19 @@ class GraspGenModule(Module[GraspGenConfig]):
 
         return grasps_np, scores_np
 
-    def _extract_points(self, msg: PointCloud2) -> np.ndarray:
-        points = msg.points().numpy()
+    def _extract_points(self, msg: PointCloud2) -> np.ndarray[Any, Any]:
+        points = msg.points().numpy()  # type: ignore[no-untyped-call]
         if not np.isfinite(points).all():
             raise ValueError("Point cloud contains NaN/Inf")
-        return points
+        return points  # type: ignore[no-any-return]
 
-    def _grasps_to_pose_array(self, grasps: np.ndarray, scores: np.ndarray, frame_id: str) -> PoseArray:
+    def _grasps_to_pose_array(self, grasps: np.ndarray[Any, Any], scores: np.ndarray[Any, Any], frame_id: str) -> PoseArray:
         sorted_indices = np.argsort(scores)[::-1]
         poses = [matrix_to_pose(grasps[idx]) for idx in sorted_indices]
         return PoseArray(header=Header(frame_id), poses=poses)
 
     def _save_visualization_data(
-        self, points: np.ndarray, grasps: np.ndarray, scores: np.ndarray, frame_id: str
+        self, points: np.ndarray[Any, Any], grasps: np.ndarray[Any, Any], scores: np.ndarray[Any, Any], frame_id: str
     ) -> None:
         import json
 

@@ -43,10 +43,9 @@ build/
 .env.local
 .env.*.local
 
-# Large data files
+# Large data files (LFS archives only)
 data/*
 !data/.lfs/
-!data/graspgen/
 
 # Model files (can be downloaded at runtime)
 *.pt
