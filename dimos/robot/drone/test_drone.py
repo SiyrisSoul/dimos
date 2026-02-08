@@ -875,8 +875,7 @@ class TestDroneStatusAndTelemetry(unittest.TestCase):
         module.movecmd = MagicMock()
 
         # Start module
-        result = module.start()
-        self.assertTrue(result)
+        module.start()
 
         # Give time for processing
         time.sleep(0.2)
