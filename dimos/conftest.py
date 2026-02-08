@@ -31,7 +31,7 @@ def _has_cuda():
 
 
 @pytest.hookimpl()
-def pytest_collection_modifyitems(_config, items):
+def pytest_collection_modifyitems(config, items):
     if not _has_cuda():
         skip_marker = pytest.mark.skip(
             reason="CUDA is not available (torch.cuda.is_available() returned False)"
