@@ -22,12 +22,12 @@ from dimos.msgs.geometry_msgs import PoseStamped
 from dimos.msgs.sensor_msgs import Image, PointCloud2
 from dimos.msgs.vision_msgs import Detection2DArray
 from dimos.perception.detection.moduleDB import ObjectDBModule
-from dimos.robot.unitree.go2 import connection
+from dimos.robot.unitree.go2 import connection as go2_connection
 
 
 @pytest.mark.module
 def test_moduleDB(dimos_cluster) -> None:
-    connection = connection.deploy(dimos_cluster, "fake")
+    connection = go2_connection.deploy(dimos_cluster, "fake")
 
     moduleDB = dimos_cluster.deploy(
         ObjectDBModule,
