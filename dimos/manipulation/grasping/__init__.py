@@ -11,20 +11,41 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+"""Grasping and pick-place manipulation.
+
+Modules:
+- GraspGenModule: Docker-based neural network grasp generation
+- PickPlaceModule: Unified pick/place orchestration with BT-based execution
+
+The PickPlaceModule is the agent-facing interface for grasping operations.
+It internally calls GraspGenModule for grasp generation.
+"""
+
 from dimos.manipulation.grasping.graspgen_module import (
     GraspGenConfig,
     GraspGenModule,
     graspgen,
 )
-from dimos.manipulation.grasping.grasping import (
-    GraspingModule,
-    grasping_module,
+from dimos.manipulation.grasping.pickplace_module import (
+    FailureCode,
+    PickPlaceModule,
+    PickPlaceModuleConfig,
+    PickResult,
+    PickStatus,
+    pickplace_module,
 )
 
 __all__ = [
+    # GraspGen (Docker neural net)
     "GraspGenConfig",
     "GraspGenModule",
-    "GraspingModule",
     "graspgen",
-    "grasping_module",
+    # PickPlace (agent-facing orchestration)
+    "FailureCode",
+    "PickPlaceModule",
+    "PickPlaceModuleConfig",
+    "PickResult",
+    "PickStatus",
+    "pickplace_module",
 ]
