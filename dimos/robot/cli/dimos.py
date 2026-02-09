@@ -202,5 +202,20 @@ def send(
     topic_send(topic, message_expr)
 
 
+@main.command(name="rerun-bridge")
+def rerun_bridge_cmd(
+    viewer_mode: str = typer.Option(
+        "native", help="Viewer mode: native (desktop), web (browser), none (headless)"
+    ),
+    memory_limit: str = typer.Option(
+        "25%", help="Memory limit for Rerun viewer (e.g., '4GB', '16GB', '25%')"
+    ),
+) -> None:
+    """Launch the Rerun visualization bridge."""
+    from dimos.visualization.rerun.bridge import run_bridge
+
+    run_bridge(viewer_mode=viewer_mode, memory_limit=memory_limit)
+
+
 if __name__ == "__main__":
     main()

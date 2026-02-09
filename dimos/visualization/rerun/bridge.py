@@ -31,6 +31,7 @@ from typing import (
 
 from reactivex.disposable import Disposable
 from toolz import pipe  # type: ignore[import-untyped]
+import typer
 
 from dimos.core import Module, rpc
 from dimos.core.module import ModuleConfig
@@ -295,28 +296,16 @@ class RerunBridgeModule(Module):
         super().stop()
 
 
-def main() -> None:
-    """CLI entry point for rerun-bridge."""
-    import argparse
+def run_bridge(
+    viewer_mode: str = "native",
+    memory_limit: str = "25%",
+) -> None:
+    """Start a RerunBridgeModule with default LCM config and block until interrupted."""
     import signal
 
-    parser = argparse.ArgumentParser(description="Rerun bridge for LCM messages")
-    parser.add_argument(
-        "--viewer-mode",
-        choices=["native", "web", "none"],
-        default="native",
-        help="Viewer mode: native (desktop), web (browser), none (headless)",
-    )
-    parser.add_argument(
-        "--memory-limit",
-        default="25%",
-        help="Memory limit for Rerun viewer (e.g., '4GB', '16GB', '25%%')",
-    )
-    args = parser.parse_args()
-
     bridge = RerunBridgeModule(
-        viewer_mode=args.viewer_mode,
-        memory_limit=args.memory_limit,
+        viewer_mode=viewer_mode,
+        memory_limit=memory_limit,
         # any pubsub that supports subscribe_all and topic that supports str(topic)
         # is acceptable here
         pubsubs=[LCM(autoconf=True)],
@@ -357,7 +346,21 @@ def main() -> None:
     signal.pause()
 
 
-if __name__ == "__main__":
-    main()
+def _cli(
+    viewer_mode: str = typer.Option(
+        "native", help="Viewer mode: native (desktop), web (browser), none (headless)"
+    ),
+    memory_limit: str = typer.Option(
+        "25%", help="Memory limit for Rerun viewer (e.g., '4GB', '16GB', '25%')"
+    ),
+) -> None:
+    """Rerun bridge for LCM messages."""
+    run_bridge(viewer_mode=viewer_mode, memory_limit=memory_limit)
 
+
+if __name__ == "__main__":
+    typer.run(_cli)
+
+# you don't need to include this in your blueprint if you are not creating a
+# custom rerun configuration for your deployment, you can also run rerun-bridge standalone
 rerun_bridge = RerunBridgeModule.blueprint
