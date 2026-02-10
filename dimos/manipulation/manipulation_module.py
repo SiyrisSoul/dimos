@@ -44,8 +44,10 @@ from dimos.msgs.trajectory_msgs import JointTrajectory
 from dimos.utils.logging_config import setup_logger
 
 if TYPE_CHECKING:
+    from dimos.core.docker_runner import DockerModule
     from dimos.core.rpc_client import RPCClient
-    from dimos.msgs.geometry_msgs import Pose
+    from dimos.msgs.geometry_msgs import Pose, PoseArray
+    from dimos.msgs.sensor_msgs import PointCloud2
 
 logger = setup_logger()
 
@@ -83,6 +85,12 @@ class ManipulationModuleConfig(ModuleConfig):
     planner_name: str = "rrt_connect"  # "rrt_connect"
     kinematics_name: str = "jacobian"  # "jacobian" or "drake_optimization"
 
+    # GraspGen Docker settings (optional)
+    graspgen_docker_image: str = "dimos-graspgen:latest"
+    graspgen_gripper_type: str = "robotiq_2f_140"
+    graspgen_num_grasps: int = 400
+    graspgen_topk_num_grasps: int = 100
+
 
 class ManipulationModule(Module):
     """Motion planning module with ControlCoordinator execution."""
@@ -117,6 +125,9 @@ class ManipulationModule(Module):
 
         # Coordinator integration (lazy initialized)
         self._coordinator_client: RPCClient | None = None
+
+        # GraspGen Docker module (lazy initialized on first generate_grasps call)
+        self._graspgen: DockerModule | None = None
 
         logger.info("ManipulationModule initialized")
 
@@ -596,6 +607,51 @@ class ManipulationModule(Module):
         status = client.get_trajectory_status(config.coordinator_task_name)
         return dict(status) if status else None
 
+    # =========================================================================
+    # GraspGen Integration RPC Methods
+    # =========================================================================
+
+    def _get_graspgen(self) -> DockerModule | None:
+        """Get or create GraspGen Docker module (lazy init)."""
+        if self._graspgen is not None:
+            return self._graspgen
+
+        from dimos.core.docker_runner import DockerModule
+        from dimos.manipulation.grasping.graspgen_module import GraspGenModule
+        from dimos.utils.data import get_data
+        from dimos.utils.path_utils import get_project_root
+
+        # Ensure GraspGen model checkpoints are pulled from LFS
+        get_data("models_graspgen")
+
+        project_root = get_project_root()
+        docker_file = project_root / "dimos" / "manipulation" / "grasping" / "docker_context" / "Dockerfile"
+        self._graspgen = DockerModule(
+            GraspGenModule,
+            docker_file=docker_file,
+            docker_build_context=project_root,
+            docker_image=self.config.graspgen_docker_image,
+            docker_env={"CI": "1"},  # skip interactive system config prompt in container
+            gripper_type=self.config.graspgen_gripper_type,
+            num_grasps=self.config.graspgen_num_grasps,
+            topk_num_grasps=self.config.graspgen_topk_num_grasps,
+        )
+        self._graspgen.start()
+        return self._graspgen
+
+    @rpc
+    def generate_grasps(
+        self,
+        pointcloud: PointCloud2,
+        scene_pointcloud: PointCloud2 | None = None,
+    ) -> PoseArray | None:
+        """Generate grasp poses for the given point cloud via GraspGen (Docker/GPU).
+        """
+        graspgen = self._get_graspgen()
+        if graspgen is None:
+            return None
+        return graspgen.generate_grasps(pointcloud, scene_pointcloud)
+
     @property
     def world_monitor(self) -> WorldMonitor | None:
         """Access the world monitor for advanced obstacle/world operations."""
@@ -654,6 +710,11 @@ class ManipulationModule(Module):
     def stop(self) -> None:
         """Stop the manipulation module."""
         logger.info("Stopping ManipulationModule")
+
+        # Stop GraspGen Docker container
+        if self._graspgen is not None:
+            self._graspgen.stop()
+            self._graspgen = None
 
         # Stop world monitor (includes visualization thread)
         if self._world_monitor is not None:

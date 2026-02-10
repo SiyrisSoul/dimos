@@ -24,6 +24,7 @@ import pytest
 
 from dimos.manipulation.manipulation_module import (
     ManipulationModule,
+    ManipulationModuleConfig,
     ManipulationState,
 )
 from dimos.manipulation.planning.spec import RobotModelConfig
@@ -100,6 +101,7 @@ def _make_module():
         module._planner = None
         module._kinematics = None
         module._coordinator_client = None
+        module._graspgen = None
         return module
 
 
@@ -303,3 +305,39 @@ class TestRobotModelConfigMapping:
         # URDF -> Coordinator
         assert config.get_coordinator_joint_name("joint1") == "left_joint1"
         assert config.get_coordinator_joint_name("unknown") == "unknown"
+
+
+# =============================================================================
+# Test GraspGen Integration
+# =============================================================================
+
+
+@pytest.mark.gpu
+@pytest.mark.cuda
+class TestGraspGenIntegration:
+    """Integration test for GraspGen via DockerModule (requires GPU + Docker)."""
+
+    def test_generate_grasps_cube_pointcloud(self):
+        """Generate grasps for a synthetic cube point cloud (500 points)."""
+        import numpy as np
+
+        from dimos.msgs.sensor_msgs import PointCloud2
+
+        # Create a cube point cloud: 500 random points in a 5cm cube centered at (0.3, 0, 0.2)
+        rng = np.random.default_rng(42)
+        points = rng.uniform(-0.025, 0.025, size=(500, 3)).astype(np.float32)
+        points += np.array([0.3, 0.0, 0.2], dtype=np.float32)
+        pointcloud = PointCloud2.from_numpy(points, frame_id="world")
+
+        module = _make_module()
+        module.config = ManipulationModuleConfig()
+        try:
+            result = module.generate_grasps(pointcloud)
+
+            assert result is not None, "generate_grasps returned None — Docker/GPU may not be available"
+            assert len(result.poses) > 0, "Expected at least one grasp pose"
+            print(f"Generated {len(result.poses)} grasp poses for cube point cloud")
+        finally:
+            if module._graspgen is not None:
+                module._graspgen.stop()
+                module._graspgen = None
