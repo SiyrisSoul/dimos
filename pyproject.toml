@@ -51,7 +51,7 @@ dependencies = [
     "colorlog==6.9.0",
     # Core Msgs
     "opencv-python",
-    "open3d-unofficial-arm; platform_machine == 'aarch64' and platform_system == 'Linux' ",
+    "open3d-unofficial-arm; platform_machine == 'aarch64' and platform_system == 'Linux'",
     "open3d>=0.18.0; platform_machine != 'aarch64' or platform_system != 'Linux'",
     # CLI
     "pydantic-settings>=2.11.0,<3",
@@ -297,7 +297,8 @@ docker = [
     "sortedcontainers",
     "PyTurboJPEG",
     "rerun-sdk",
-    "open3d"
+    "open3d-unofficial-arm; platform_machine == 'aarch64' and platform_system == 'Linux'",
+    "open3d>=0.18.0; platform_machine != 'aarch64' or platform_system != 'Linux'",
 ]
 
 base = [
