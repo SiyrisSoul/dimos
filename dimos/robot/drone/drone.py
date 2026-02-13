@@ -273,7 +273,8 @@ class Drone(Robot):
     @functools.cached_property
     def gps_position_stream(self) -> Observable[LatLon]:
         assert self.connection is not None
-        return self.connection.gps_location.transport.pure_observable()
+        result: Observable[LatLon] = self.connection.gps_location.transport.pure_observable()
+        return result
 
     def get_status(self) -> dict[str, Any]:
         """Get drone status.
