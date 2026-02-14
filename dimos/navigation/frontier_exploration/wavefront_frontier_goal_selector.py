@@ -815,9 +815,11 @@ class WavefrontFrontierExplorer(Module):
     @skill
     def begin_exploration(self) -> str:
         """Command the robot to move around and explore the area. Cancelled with end_exploration."""
-        self.explore()
+        started = self.explore()
+        if not started:
+            return "Exploration skill is already active. Use end_exploration to stop before starting again."
         return (
-            "Started exploration skill. The robot is now moving. Use stop_exploration "
+            "Started exploration skill. The robot is now moving. Use end_exploration "
             "to stop. You also need to cancel before starting a new movement tool."
         )
 

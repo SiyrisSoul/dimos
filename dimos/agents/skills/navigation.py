@@ -268,11 +268,11 @@ class NavigationSkillContainer(Module):
 
         goal_pose = self._get_goal_pose_from_result(best_match)
 
-        print("Goal pose for semantic nav:", goal_pose)
+        logger.info("Goal pose for semantic nav", pose=goal_pose)
         if not goal_pose:
             return f"Found a result for '{query}' but it didn't have a valid position."
 
-        message = "Found a location in the semantic map matching '{query}'."
+        message = f"Found a location in the semantic map matching '{query}'."
         return self._navigate_to(goal_pose, message)
 
     @skill
@@ -306,9 +306,7 @@ class NavigationSkillContainer(Module):
         metadata = result.get("metadata")
         if not metadata:
             return None
-        print(metadata)
         first = metadata[0]
-        print(first)
         pos_x = first.get("pos_x", 0)
         pos_y = first.get("pos_y", 0)
         theta = first.get("rot_z", 0)

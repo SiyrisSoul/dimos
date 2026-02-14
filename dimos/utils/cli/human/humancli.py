@@ -64,18 +64,22 @@ class ThinkingIndicator:
         self._app: App[Any] = app
         self._chat_log = chat_log
         self._add_message = add_message_fn
-        self._timer: Any
+        self._timer: Any = None
         self._strips: list[Any] = []
         self.visible = False
         self._throb_dim = False
 
     def show(self) -> None:
+        if self.visible:
+            return
         self.visible = True
         self._throb_dim = False
         self._write_line()
         self._timer = self._app.set_interval(0.6, self._toggle_throb)
 
     def hide(self) -> None:
+        if not self.visible:
+            return
         self.visible = False
         if self._timer is not None:
             self._timer.stop()
@@ -102,9 +106,7 @@ class ThinkingIndicator:
         if not self._strips:
             return
         strip_ids = {id(s) for s in self._strips}
-        self._chat_log.lines = [
-            line for line in self._chat_log.lines if id(line) not in strip_ids
-        ]
+        self._chat_log.lines = [line for line in self._chat_log.lines if id(line) not in strip_ids]
         self._strips = []
         self._chat_log._line_cache.clear()
         self._chat_log.virtual_size = Size(
