@@ -62,6 +62,8 @@ def read_json_file(path: str) -> dict[str, str]:
 class StubNativeConfig(NativeModuleConfig):
     executable: str = _ECHO
     log_format: LogFormat = LogFormat.TEXT
+    output_file: str | None = None
+    die_after: float | None = None
     some_param: float = 1.5
 
 
@@ -91,7 +93,7 @@ class StubProducer(Module):
 
 def test_process_crash_triggers_stop() -> None:
     """When the native process dies unexpectedly, the watchdog calls stop()."""
-    mod = StubNativeModule(extra_env={"NATIVE_ECHO_DIE_AFTER": "0.2"})
+    mod = StubNativeModule(die_after=0.2)
     mod.pointcloud.transport = LCMTransport("/pc", PointCloud2)
     mod.start()
 
@@ -111,7 +113,7 @@ def test_manual(dimos_cluster, args_file) -> None:
     native_module = dimos_cluster.deploy(
         StubNativeModule,
         some_param=2.5,
-        extra_env={"NATIVE_ECHO_OUTPUT": args_file},
+        output_file=args_file,
     )
 
     native_module.pointcloud.transport = LCMTransport("/my/custom/lidar", PointCloud2)
@@ -123,6 +125,7 @@ def test_manual(dimos_cluster, args_file) -> None:
     assert read_json_file(args_file) == {
         "cmd_vel": "/cmd_vel#geometry_msgs.Twist",
         "pointcloud": "/my/custom/lidar#sensor_msgs.PointCloud2",
+        "output_file": args_file,
         "some_param": "2.5",
     }
 
@@ -133,7 +136,7 @@ def test_autoconnect(args_file) -> None:
     blueprint = autoconnect(
         StubNativeModule.blueprint(
             some_param=2.5,
-            extra_env={"NATIVE_ECHO_OUTPUT": args_file},
+            output_file=args_file,
         ),
         StubConsumer.blueprint(),
         StubProducer.blueprint(),
@@ -167,5 +170,6 @@ def test_autoconnect(args_file) -> None:
         "cmd_vel": "/cmd_vel#geometry_msgs.Twist",
         "pointcloud": "/my/custom/lidar#sensor_msgs.PointCloud2",
         "imu": "/imu#sensor_msgs.Imu",
+        "output_file": args_file,
         "some_param": "2.5",
     }
