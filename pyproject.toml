@@ -49,7 +49,7 @@ dependencies = [
     # Logging
     "structlog>=25.5.0,<26",
     # Core Msgs
-    "opencv-python",
+    "opencv-python-headless",
     "open3d-unofficial-arm; platform_system == 'Linux' and platform_machine == 'aarch64'",
     "open3d>=0.18.0; platform_system != 'Linux' or platform_machine != 'aarch64'",
     # CLI
@@ -114,6 +114,7 @@ web = [
 
 perception = [
     "ultralytics>=8.3.70",
+    "lap>=0.5.12", # needed by ultralytics (and for some reason not required by them directly)
     "Pillow",
     "transformers[torch]==4.49.0",
     "moondream",
@@ -246,7 +247,6 @@ docker = [
     "pydantic",
     "pydantic-settings>=2.11.0,<3",
     "typer>=0.19.2,<1",
-    "opencv-python-headless",
     "lcm",
     "sortedcontainers",
     "PyTurboJPEG",
