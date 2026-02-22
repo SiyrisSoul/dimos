@@ -257,6 +257,10 @@ def start(n: int | None = None, memory_limit: str = "auto") -> DimosCluster:
             threads_per_worker=4,
             memory_limit=memory_limit,
             plugins=[CudaCleanupPlugin()],  # Register CUDA cleanup plugin
+            # Preload torch shared libraries at worker startup to prevent TLS
+            # allocation failures ("cannot allocate memory in static TLS block")
+            # that occur when libc10.so is lazily dlopen'd inside a worker.
+            preload=["dimos.core._torch_preload"],
         )
         client = Client(cluster)  # type: ignore[no-untyped-call]
 

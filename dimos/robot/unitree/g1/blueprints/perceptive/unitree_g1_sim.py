@@ -20,10 +20,12 @@ from dimos.robot.unitree.g1.blueprints.basic.unitree_g1_basic_sim import unitree
 from dimos.robot.unitree.g1.blueprints.perceptive._perception_and_memory import (
     _perception_and_memory,
 )
+from dimos.visualization.rerun.bridge import rerun_bridge
 
 unitree_g1_sim = autoconnect(
     unitree_g1_basic_sim,
     _perception_and_memory,
+    rerun_bridge(),
 ).global_config(n_dask_workers=8)
 
 __all__ = ["unitree_g1_sim"]
