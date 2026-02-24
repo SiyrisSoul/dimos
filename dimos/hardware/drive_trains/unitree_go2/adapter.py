@@ -55,7 +55,7 @@ class UnitreeGo2Adapter:
         if dof != 3:
             raise ValueError(f"Go2 only supports 3 DOF (vx, vy, wz), got {dof}")
 
-        self._network_interface = network_interface
+        self._network_interface = network_interface  # domain ID for DDS
         self._client = None
         self._state_subscriber = None
         self._connected = False
@@ -152,9 +152,19 @@ class UnitreeGo2Adapter:
     # =========================================================================
 
     def read_velocities(self) -> list[float]:
-        """Return last commanded velocities."""
+        """Read actual velocities from SportModeState as [vx, vy, wz]."""
         with self._lock:
-            return self._last_velocities.copy()
+            if self._latest_state is None:
+                return [0.0, 0.0, 0.0]
+            try:
+                state = self._latest_state
+                return [
+                    float(state.velocity[0]),  # vx
+                    float(state.velocity[1]),  # vy
+                    float(state.imu_state.gyroscope[2]),  # wz (yaw rate)
+                ]
+            except Exception:
+                return [0.0, 0.0, 0.0]
 
     def read_odometry(self) -> list[float] | None:
         """Read odometry from Go2 as [x, y, theta].
