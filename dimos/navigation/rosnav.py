@@ -47,6 +47,7 @@ from dimos.msgs.sensor_msgs import Joy, PointCloud2
 from dimos.msgs.std_msgs import Bool, Int8
 from dimos.msgs.tf2_msgs.TFMessage import TFMessage
 from dimos.navigation.base import NavigationInterface, NavigationState
+from dimos.utils.generic import classproperty
 from dimos.utils.logging_config import setup_logger
 from dimos.utils.transform_utils import euler_to_quaternion
 
@@ -109,6 +110,34 @@ class ROSNav(
     config: ROSNavConfig
     default_config = ROSNavConfig
 
+    @classproperty
+    def blueprint(self) -> Any:  # type: ignore[override]
+        # super().blueprint doesn't work with classproperty descriptors (Python passes the
+        # metaclass as `cls` rather than ROSNav).  Blueprint.create(cls, ...) is the exact
+        # equivalent of what Module.blueprint.fget(cls) returns a partial of.
+        from dimos.core.blueprints import Blueprint
+
+        def factory(*args: Any, **kwargs: Any) -> Any:
+            return Blueprint.create(self, *args, **kwargs).transports(
+                {
+                    ("ros_goal_reached", Bool): ROSTransport("/goal_reached", Bool),
+                    ("ros_cmd_vel", TwistStamped): ROSTransport("/cmd_vel", TwistStamped),
+                    ("ros_way_point", PoseStamped): ROSTransport("/way_point", PoseStamped),
+                    ("ros_registered_scan", PointCloud2): ROSTransport(
+                        "/registered_scan", PointCloud2
+                    ),
+                    ("ros_global_map", PointCloud2): ROSTransport("/terrain_map_ext", PointCloud2),
+                    ("ros_path", NavPath): ROSTransport("/path", NavPath),
+                    ("ros_tf", TFMessage): ROSTransport("/tf", TFMessage),
+                    ("ros_goal_pose", PoseStamped): ROSTransport("/goal_pose", PoseStamped),
+                    ("ros_cancel_goal", Bool): ROSTransport("/cancel_goal", Bool),
+                    ("ros_soft_stop", Int8): ROSTransport("/stop", Int8),
+                    ("ros_joy", Joy): ROSTransport("/joy", Joy),
+                }
+            )
+
+        return factory
+
     # Existing ports (default LCM/pSHM transport)
     goal_req: In[PoseStamped]
 
@@ -162,27 +191,6 @@ class ROSNav(
 
         logger.info("NavigationModule initialized")
 
-    def _configure_ros_transports(self) -> None:
-        """
-        Wire up ROS topic transports for all ROS ports.
-
-        Called automatically in start() when running inside Docker (where the
-        host-side deploy() has not pre-configured these transports).  In non-Docker
-        deployments the deploy() function sets these externally before start() is
-        called, so this method is skipped.
-        """
-        self.ros_goal_reached.transport = ROSTransport("/goal_reached", Bool)
-        self.ros_cmd_vel.transport = ROSTransport("/cmd_vel", TwistStamped)
-        self.ros_way_point.transport = ROSTransport("/way_point", PoseStamped)
-        self.ros_registered_scan.transport = ROSTransport("/registered_scan", PointCloud2)
-        self.ros_global_map.transport = ROSTransport("/terrain_map_ext", PointCloud2)
-        self.ros_path.transport = ROSTransport("/path", NavPath)
-        self.ros_tf.transport = ROSTransport("/tf", TFMessage)
-        self.ros_goal_pose.transport = ROSTransport("/goal_pose", PoseStamped)
-        self.ros_cancel_goal.transport = ROSTransport("/cancel_goal", Bool)
-        self.ros_soft_stop.transport = ROSTransport("/stop", Int8)
-        self.ros_joy.transport = ROSTransport("/joy", Joy)
-
     @rpc
     def start(self) -> None:
         self._running = True
@@ -193,12 +201,6 @@ class ROSNav(
         threading.Thread(target=self._start_ros, daemon=True, name="ROSNavStartThread").start()
 
     def _start_ros(self) -> None:
-        # In Docker mode the host-side deploy() does not set ROS transports
-        # (ROSTransport requires rclpy, only available inside the container).
-        # Configure them here if they haven't been set externally.
-        if self.ros_goal_reached.transport is None:
-            self._configure_ros_transports()
-
         self._disposables.add(
             self._local_pointcloud_subject.pipe(
                 ops.sample(1.0 / self.config.local_pointcloud_freq),
@@ -471,8 +473,7 @@ def deploy(dimos: DimosCluster) -> Any:  # type: ignore[no-untyped-def]
     nav.set_transport("path_active", LCMTransport("/path_active", NavPath))
     nav.set_transport("cmd_vel", LCMTransport("/cmd_vel", Twist))
 
-    # ROS transports are configured inside the container by _configure_ros_transports()
-    # called from start() - no host-side setup needed.
+    # ROS transports are pre-configured at blueprint level via ros_nav() - no host-side setup needed.
 
     nav.start()
     return nav
