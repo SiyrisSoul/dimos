@@ -41,9 +41,10 @@ from dimos.msgs import DimosMsg
 from dimos.protocol.pubsub.impl.rospubsub_conversion import (
     derive_ros_type,
     dimos_to_ros,
+    get_dimos_type,
     ros_to_dimos,
 )
-from dimos.protocol.pubsub.spec import PubSub
+from dimos.protocol.pubsub.spec import DiscoveryPubSub, PubSub
 
 
 @runtime_checkable
@@ -246,7 +247,7 @@ class RawROS(PubSub[RawROSTopic, Any]):
             return unsubscribe
 
 
-class DimosROS(PubSub[ROSTopic, DimosMsg]):
+class DimosROS(DiscoveryPubSub[ROSTopic, DimosMsg]):
     """ROS PubSub with automatic dimos.msgs ↔ ROS message conversion.
 
     Uses ROSTopic (with dimos msg_type) instead of RawROSTopic (with ros_type).
@@ -306,6 +307,32 @@ class DimosROS(PubSub[ROSTopic, DimosMsg]):
             callback(dimos_msg, topic)
 
         return self._raw.subscribe(raw_topic, wrapped_callback)
+
+    def subscribe_new_topics(self, callback: Callable[[ROSTopic], Any]) -> Callable[[], None]:
+        """Poll the ROS graph for new topics and notify callback for each
+        that maps to a known dimos type.  Polls every second in a daemon thread."""
+        seen: set[str] = set()
+        stop_event = threading.Event()
+
+        def _poll() -> None:
+            while not stop_event.is_set():
+                node = self._raw._node
+                if node is not None:
+                    for topic_name, type_strings in node.get_topic_names_and_types():
+                        if topic_name in seen:
+                            continue
+                        for ros_type_str in type_strings:
+                            # "geometry_msgs/msg/PoseStamped" -> "geometry_msgs.PoseStamped"
+                            parts = ros_type_str.split("/")
+                            msg_name = f"{parts[0]}.{parts[-1]}" if len(parts) >= 2 else None
+                            if msg_name and (dimos_type := get_dimos_type(msg_name)) is not None:
+                                seen.add(topic_name)
+                                callback(ROSTopic(topic_name, dimos_type))
+                                break
+                stop_event.wait(1.0)
+
+        threading.Thread(target=_poll, daemon=True, name="dimos_ros_discovery").start()
+        return stop_event.set
 
 
 ROS = DimosROS
