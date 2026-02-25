@@ -142,6 +142,10 @@ agents = [
     "openai",
     "openai-whisper",
     "sounddevice",
+    "piper-tts>=1.2.0",
+
+    # MCP Server
+    "mcp>=1.0.0",
 ]
 
 web = [
