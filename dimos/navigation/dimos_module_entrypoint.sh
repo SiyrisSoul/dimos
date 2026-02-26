@@ -60,13 +60,25 @@ if [ "${START_ROS_NAV:-true}" = "true" ]; then
     if [ "${START_UNITY_SIM:-false}" = "true" ]; then
         echo "[dimos_module_entrypoint] START_UNITY_SIM=true: launching Unity simulation stack in background..."
         cd /ros2_ws/src/ros-navigation-autonomy-stack
+
+        # Start Unity environment inside the container (same as run_both.sh)
+        UNITY_EXECUTABLE="./src/base_autonomy/vehicle_simulator/mesh/unity/environment/Model.x86_64"
+        if [ -f "$UNITY_EXECUTABLE" ]; then
+            echo "[dimos_module_entrypoint] Starting Unity environment: $UNITY_EXECUTABLE"
+            "$UNITY_EXECUTABLE" &
+            UNITY_PID=$!
+        else
+            echo "[dimos_module_entrypoint] WARNING: Unity executable not found at $UNITY_EXECUTABLE"
+            exit 1
+        fi
+
         # Launch Unity-based vehicle_simulator + planners
         setsid bash -c "source /opt/ros/${ROS_DISTRO:-humble}/setup.bash && \
             source /ros2_ws/install/setup.bash && \
             ros2 launch vehicle_simulator system_simulation_with_route_planner.launch.py \
             enable_bridge:=false" &
         SIM_PID=$!
-        echo "[dimos_module_entrypoint] Unity simulation started (PID: $SIM_PID), waiting for init..."
+        echo "[dimos_module_entrypoint] Unity simulation + nav stack started (SIM_PID: $SIM_PID, UNITY_PID: ${UNITY_PID:-none}), waiting for init..."
         sleep 5
     else
         echo "[dimos_module_entrypoint] START_UNITY_SIM=false: skipping Unity simulation launch"

@@ -25,23 +25,42 @@ import shutil
 import threading
 import time
 
-from geometry_msgs.msg import (  # type: ignore[attr-defined]
-    PointStamped as ROSPointStamped,
-    PoseStamped as ROSPoseStamped,
-    TwistStamped as ROSTwistStamped,
-)
-from nav_msgs.msg import Path as ROSPath  # type: ignore[attr-defined]
+# ROS message imports: available inside the ROS2 container, but may be missing on the host
+try:  # pragma: no cover - import-time environment dependent
+    from geometry_msgs.msg import (  # type: ignore[attr-defined]
+        PointStamped as ROSPointStamped,
+        PoseStamped as ROSPoseStamped,
+        TwistStamped as ROSTwistStamped,
+    )
+    from nav_msgs.msg import Path as ROSPath  # type: ignore[attr-defined]
+    from sensor_msgs.msg import (  # type: ignore[attr-defined]
+        Joy as ROSJoy,
+        PointCloud2 as ROSPointCloud2,
+    )
+    from std_msgs.msg import (  # type: ignore[attr-defined]
+        Bool as ROSBool,
+        Int8 as ROSInt8,
+    )
+    from tf2_msgs.msg import TFMessage as ROSTFMessage  # type: ignore[attr-defined]
+except ModuleNotFoundError:
+    # Running outside a ROS2 environment (e.g. host CLI without ROS Python packages).
+    # Define minimal placeholder types so blueprints can import without failing.
+    class _Stub:  # pragma: no cover - host-only stub
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+    ROSPointStamped = _Stub  # type: ignore[assignment]
+    ROSPoseStamped = _Stub  # type: ignore[assignment]
+    ROSTwistStamped = _Stub  # type: ignore[assignment]
+    ROSPath = _Stub  # type: ignore[assignment]
+    ROSJoy = _Stub  # type: ignore[assignment]
+    ROSPointCloud2 = _Stub  # type: ignore[assignment]
+    ROSBool = _Stub  # type: ignore[assignment]
+    ROSInt8 = _Stub  # type: ignore[assignment]
+    ROSTFMessage = _Stub  # type: ignore[assignment]
+
 from reactivex import operators as ops
 from reactivex.subject import Subject
-from sensor_msgs.msg import (  # type: ignore[attr-defined]
-    Joy as ROSJoy,
-    PointCloud2 as ROSPointCloud2,
-)
-from std_msgs.msg import (  # type: ignore[attr-defined]
-    Bool as ROSBool,
-    Int8 as ROSInt8,
-)
-from tf2_msgs.msg import TFMessage as ROSTFMessage  # type: ignore[attr-defined]
 
 from dimos import spec
 from dimos.agents.annotation import skill
