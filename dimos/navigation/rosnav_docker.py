@@ -62,6 +62,7 @@ except ModuleNotFoundError:
     ROSInt8 = _Stub  # type: ignore[assignment]
     ROSTFMessage = _Stub  # type: ignore[assignment]
 
+from reactivex import operators as ops
 from reactivex.subject import Subject
 
 from dimos import spec
@@ -246,25 +247,25 @@ class ROSNav(
     def start(self) -> None:
         self._running = True
 
-        # self._disposables.add(
-        #     self._local_pointcloud_subject.pipe(
-        #         ops.sample(1.0 / self.config.local_pointcloud_freq),
-        #         ops.map(lambda msg: _pc2_from_ros(msg)),  # type: ignore[arg-type]
-        #     ).subscribe(
-        #         on_next=self.pointcloud.publish,
-        #         on_error=lambda e: logger.error(f"Lidar stream error: {e}"),
-        #     )
-        # )
+        self._disposables.add(
+            self._local_pointcloud_subject.pipe(
+                ops.sample(1.0 / self.config.local_pointcloud_freq),
+                ops.map(lambda msg: _pc2_from_ros(msg)),  # type: ignore[arg-type]
+            ).subscribe(
+                on_next=self.pointcloud.publish,
+                on_error=lambda e: logger.error(f"Lidar stream error: {e}"),
+            )
+        )
 
-        # self._disposables.add(
-        #     self._global_pointcloud_subject.pipe(
-        #         ops.sample(1.0 / self.config.global_map_freq),
-        #         ops.map(lambda msg: _pc2_from_ros(msg)),  # type: ignore[arg-type]
-        #     ).subscribe(
-        #         on_next=self.global_pointcloud.publish,
-        #         on_error=lambda e: logger.error(f"Map stream error: {e}"),
-        #     )
-        # )
+        self._disposables.add(
+            self._global_pointcloud_subject.pipe(
+                ops.sample(1.0 / self.config.global_map_freq),
+                ops.map(lambda msg: _pc2_from_ros(msg)),  # type: ignore[arg-type]
+            ).subscribe(
+                on_next=self.global_pointcloud.publish,
+                on_error=lambda e: logger.error(f"Map stream error: {e}"),
+            )
+        )
 
         # Create and start the spin thread for ROS2 node spinning
         self._spin_thread = threading.Thread(
