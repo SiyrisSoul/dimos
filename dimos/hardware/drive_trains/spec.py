@@ -52,20 +52,6 @@ class TwistBaseAdapter(HardwareAdapter, Protocol):
     - Angle: radians
     """
 
-    # --- Connection ---
-
-    def connect(self) -> bool:
-        """Connect to hardware. Returns True on success."""
-        ...
-
-    def disconnect(self) -> None:
-        """Disconnect from hardware."""
-        ...
-
-    def is_connected(self) -> bool:
-        """Check if connected."""
-        ...
-
     # --- Info ---
 
     def get_dof(self) -> int:

@@ -29,12 +29,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 import threading
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from dimos.utils.logging_config import setup_logger
 
 if TYPE_CHECKING:
     from dimos.hardware.drive_trains.registry import TwistBaseAdapterRegistry
+    from unitree_sdk2py.core.channel import ChannelSubscriber
+    from unitree_sdk2py.go2.sport.sport_client import SportClient
+    from unitree_sdk2py.idl.unitree_go.msg.dds_ import SportModeState_
 
 logger = setup_logger()
 
@@ -43,10 +46,10 @@ logger = setup_logger()
 class _Session:
     """Active connection state for a Go2."""
 
-    client: Any  # SportClient
+    client: SportClient
     lock: threading.Lock
-    state_sub: Any = None  # ChannelSubscriber
-    latest_state: Any = None  # SportModeState_
+    state_sub: ChannelSubscriber | None = None
+    latest_state: SportModeState_ | None = None
     enabled: bool = False
     locomotion_ready: bool = False
 
@@ -139,6 +142,12 @@ class UnitreeGo2TwistAdapter:
                 time.sleep(2)
             except Exception as e:
                 logger.error(f"Error during disconnect: {e}")
+
+            if session.state_sub is not None:
+                try:
+                    session.state_sub.Close()
+                except Exception as e:
+                    logger.error(f"Error closing state subscriber: {e}")
 
         self._session = None
 
