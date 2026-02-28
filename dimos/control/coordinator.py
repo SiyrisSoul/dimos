@@ -30,7 +30,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import threading
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from dimos.control.components import (
     TWIST_SUFFIX_MAP,
@@ -99,7 +99,7 @@ class TaskConfig:
     # Cartesian IK / Teleop IK specific
     model_path: str | Path | None = None
     ee_joint_id: int = 6
-    hand: str = ""  # teleop_ik only: "left" or "right" controller
+    hand: Literal["left", "right"] | None = None  # teleop_ik only
     # Teleop IK gripper specific
     gripper_joint: str | None = None
     gripper_open_pos: float = 0.0
@@ -254,11 +254,9 @@ class ControlCoordinator(Module[ControlCoordinatorConfig]):
         """Create a manipulator adapter from component config."""
         from dimos.hardware.manipulators.registry import adapter_registry
 
-        # Adapter DOF is arm joints only — gripper joints use separate adapter methods.
-        arm_dof = len(component.joints) - len(component.gripper_joints)
         return adapter_registry.create(
             component.adapter_type,
-            dof=arm_dof,
+            dof=len(component.joints),
             address=component.address,
         )
 

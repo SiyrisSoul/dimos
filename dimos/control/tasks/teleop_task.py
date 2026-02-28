@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import threading
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 import pinocchio  # type: ignore[import-untyped]
@@ -80,7 +80,7 @@ class TeleopIKTaskConfig:
     priority: int = 10
     timeout: float = 0.5
     max_joint_delta_deg: float = 5.0  # ~500°/s at 100Hz
-    hand: str = ""
+    hand: Literal["left", "right"] | None = None
     gripper_joint: str | None = None
     gripper_open_pos: float = 0.0
     gripper_closed_pos: float = 0.0
@@ -127,6 +127,8 @@ class TeleopIKTask(BaseControlTask):
             raise ValueError(f"TeleopIKTask '{name}' requires at least one joint")
         if not config.model_path:
             raise ValueError(f"TeleopIKTask '{name}' requires model_path for IK solver")
+        if config.hand not in ("left", "right"):
+            raise ValueError(f"TeleopIKTask '{name}' requires hand='left' or 'right'")
 
         self._name = name
         self._config = config
@@ -297,43 +299,24 @@ class TeleopIKTask(BaseControlTask):
     # =========================================================================
 
     def on_buttons(self, msg: Buttons) -> bool:
-        """Press-and-hold engage: hold primary button to track, release to stop.
-
-        Checks only the button matching self._config.hand (left_primary or right_primary).
-        If hand is not set, listens to both.
-        """
-        hand = self._config.hand
-        if hand == "left":
-            primary = msg.left_primary
-        elif hand == "right":
-            primary = msg.right_primary
-        else:
-            primary = msg.left_primary or msg.right_primary
+        """Press-and-hold engage: hold primary button to track, release to stop."""
+        is_left = self._config.hand == "left"
+        primary = msg.left_primary if is_left else msg.right_primary
 
         if primary and not self._prev_primary:
-            # Rising edge: reset initial pose so compute() recaptures
             logger.info(f"TeleopIKTask {self._name}: engage")
             with self._lock:
                 self._initial_ee_pose = None
         elif not primary and self._prev_primary:
-            # Falling edge: stop tracking
             logger.info(f"TeleopIKTask {self._name}: disengage")
             with self._lock:
                 self._target_pose = None
                 self._initial_ee_pose = None
         self._prev_primary = primary
 
-        # Gripper: decode analog trigger from bits 16-31 of Buttons and update target
         if self._config.gripper_joint:
-            if hand == "left":
-                self.on_gripper_trigger(msg.left_trigger_analog, 0.0)
-            elif hand == "right":
-                self.on_gripper_trigger(msg.right_trigger_analog, 0.0)
-            else:
-                logger.warning(
-                    f"TeleopIKTask {self._name}: gripper_joint is set but hand is not "
-                    f"'left' or 'right' — cannot determine which trigger to use"
-                )
+            trigger = msg.left_trigger_analog if is_left else msg.right_trigger_analog
+            self.on_gripper_trigger(trigger, 0.0)
 
         return True
 
