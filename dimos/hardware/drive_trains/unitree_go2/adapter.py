@@ -34,10 +34,11 @@ from typing import TYPE_CHECKING
 from dimos.utils.logging_config import setup_logger
 
 if TYPE_CHECKING:
-    from dimos.hardware.drive_trains.registry import TwistBaseAdapterRegistry
     from unitree_sdk2py.core.channel import ChannelSubscriber
     from unitree_sdk2py.go2.sport.sport_client import SportClient
     from unitree_sdk2py.idl.unitree_go.msg.dds_ import SportModeState_
+
+    from dimos.hardware.drive_trains.registry import TwistBaseAdapterRegistry
 
 logger = setup_logger()
 
