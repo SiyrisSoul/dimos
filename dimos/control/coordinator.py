@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import threading
 import time
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 from dimos.control.components import (
     TWIST_SUFFIX_MAP,
