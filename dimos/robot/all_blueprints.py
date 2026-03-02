@@ -62,6 +62,7 @@ all_blueprints = {
     "unitree-g1-agentic": "dimos.robot.unitree.g1.blueprints.agentic.unitree_g1_agentic:unitree_g1_agentic",
     "unitree-g1-agentic-sim": "dimos.robot.unitree.g1.blueprints.agentic.unitree_g1_agentic_sim:unitree_g1_agentic_sim",
     "unitree-g1-basic": "dimos.robot.unitree.g1.blueprints.basic.unitree_g1_basic:unitree_g1_basic",
+    "unitree-g1-basic-ros": "dimos.robot.unitree.g1.blueprints.basic.unitree_g1_basic_ros:unitree_g1_basic_ros",
     "unitree-g1-basic-sim": "dimos.robot.unitree.g1.blueprints.basic.unitree_g1_basic_sim:unitree_g1_basic_sim",
     "unitree-g1-basic-sim-ros": "dimos.robot.unitree.g1.blueprints.basic.unitree_g1_basic_sim_ros:unitree_g1_basic_sim_ros",
     "unitree-g1-basic-replay-ros": "dimos.robot.unitree.g1.blueprints.basic.unitree_g1_basic_replay_ros:unitree_g1_basic_replay_ros",
