@@ -16,14 +16,19 @@ import asyncio
 from collections.abc import Sequence
 import logging
 import threading
+from typing import TYPE_CHECKING
 
 from dimos_lcm.foxglove_bridge import (
     FoxgloveBridge as LCMFoxgloveBridge,
 )
 
-from dimos.core import DimosCluster, Module, rpc
-from dimos.core.module import ModuleConfig
+from dimos.core.core import rpc
+from dimos.core.module import Module, ModuleConfig
+from dimos.core.module_coordinator import ModuleCoordinator
 from dimos.utils.logging_config import setup_logger
+
+if TYPE_CHECKING:
+    from dimos.core.rpc_client import ModuleProxy
 
 logging.getLogger("lcm_foxglove_bridge").setLevel(logging.ERROR)
 logging.getLogger("FoxgloveServer").setLevel(logging.ERROR)
@@ -87,9 +92,9 @@ class FoxgloveBridge(Module[FoxgloveConfig]):
 
 
 def deploy(
-    dimos: DimosCluster,
+    dimos: ModuleCoordinator,
     shm_channels: list[str] | None = None,
-) -> FoxgloveBridge:
+) -> "ModuleProxy":
     if shm_channels is None:
         shm_channels = [
             "/image#sensor_msgs.Image",
@@ -101,7 +106,7 @@ def deploy(
         shm_channels=shm_channels,
     )
     foxglove_bridge.start()
-    return foxglove_bridge  # type: ignore[no-any-return]
+    return foxglove_bridge
 
 
 foxglove_bridge = FoxgloveBridge.blueprint

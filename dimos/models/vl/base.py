@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 import json
 import logging
@@ -69,6 +71,9 @@ def vlm_detection_to_detection2d(
     Returns:
         Detection2DBBox instance or None if invalid
     """
+    # Here to prevent unwanted imports in the file.
+    from dimos.perception.detection.type import Detection2DBBox
+
     # Validate list/tuple structure
     if not isinstance(vlm_detection, (list, tuple)):
         logger.debug(f"VLM detection is not a list/tuple: {type(vlm_detection)}")
@@ -124,6 +129,8 @@ def vlm_point_to_detection2d_point(
     Returns:
         Detection2DPoint instance or None if invalid
     """
+    from dimos.perception.detection.type import Detection2DPoint
+
     # Validate list/tuple structure
     if not isinstance(vlm_point, (list, tuple)):
         logger.debug(f"VLM point is not a list/tuple: {type(vlm_point)}")
@@ -251,6 +258,9 @@ class VlModel(Captioner, Resource, Configurable[_VlConfig]):
     def query_detections(
         self, image: Image, query: str, **kwargs: object
     ) -> ImageDetections2D[Detection2DBBox]:
+        # Here to prevent unwanted imports in the file.
+        from dimos.perception.detection.type import ImageDetections2D
+
         full_query = f"""show me bounding boxes in pixels for this query: `{query}`
 
         format should be:
@@ -309,6 +319,9 @@ class VlModel(Captioner, Resource, Configurable[_VlConfig]):
         Returns:
             ImageDetections2D containing Detection2DPoint instances
         """
+        # Here to prevent unwanted imports in the file.
+        from dimos.perception.detection.type import ImageDetections2D
+
         full_query = f"""Show me point coordinates in pixels for this query: `{query}`
 
         The format should be:

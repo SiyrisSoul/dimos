@@ -14,8 +14,6 @@
 
 """Simulator-agnostic manipulator simulation module."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from pathlib import Path
 import threading
@@ -24,9 +22,10 @@ from typing import Any
 
 from reactivex.disposable import Disposable
 
-from dimos.core import In, Module, Out, rpc
+from dimos.core.core import rpc
 from dimos.core.global_config import GlobalConfig, global_config
-from dimos.core.module import ModuleConfig
+from dimos.core.module import Module, ModuleConfig
+from dimos.core.stream import In, Out
 from dimos.msgs.sensor_msgs import JointCommand, JointState, RobotState
 from dimos.simulation.engines import EngineType, get_engine
 from dimos.simulation.manipulators.sim_manip_interface import SimManipInterface

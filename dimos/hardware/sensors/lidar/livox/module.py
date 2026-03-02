@@ -28,8 +28,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from dimos.core import Out
 from dimos.core.native_module import NativeModule, NativeModuleConfig
+from dimos.core.stream import Out
 from dimos.hardware.sensors.lidar.livox.ports import (
     SDK_CMD_DATA_PORT,
     SDK_HOST_CMD_DATA_PORT,

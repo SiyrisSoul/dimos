@@ -20,23 +20,21 @@ from typing import TYPE_CHECKING, Any
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.requests import Request
 from starlette.responses import Response
 import uvicorn
 
-from dimos.utils.logging_config import setup_logger
-
-logger = setup_logger()
-
-
-from dimos.core import Module, rpc  # noqa: I001
+from dimos.core.core import rpc
+from dimos.core.module import Module
 from dimos.core.rpc_client import RpcCall, RPCClient
-
-from starlette.requests import Request
+from dimos.utils.logging_config import setup_logger
 
 if TYPE_CHECKING:
     import concurrent.futures
 
     from dimos.core.module import SkillInfo
+
+logger = setup_logger()
 
 
 app = FastAPI()

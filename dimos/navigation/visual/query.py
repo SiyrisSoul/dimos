@@ -14,7 +14,7 @@
 
 from typing import Any
 
-from dimos.models.qwen.video_query import BBox
+from dimos.models.qwen.bbox import BBox
 from dimos.models.vl.base import VlModel
 from dimos.msgs.sensor_msgs import Image
 from dimos.utils.generic import extract_json_from_llm_response
