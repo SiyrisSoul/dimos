@@ -13,6 +13,9 @@
 #
 set -euo pipefail
 
+# ─── signal handling (must be early so Ctrl+C works everywhere) ────────────────
+trap 'printf "\n"; exit 130' INT
+
 # If piped from curl (stdin is not a TTY and $0 is the shell),
 # save to temp file and re-execute so interactive prompts get proper TTY input.
 if [ ! -t 0 ] && { [ "$0" = "bash" ] || [ "$0" = "-bash" ] || [ "$0" = "/bin/bash" ] || [ "$0" = "/usr/bin/bash" ] || [ "$0" = "sh" ] || [ "$0" = "/bin/sh" ]; }; then
@@ -553,7 +556,7 @@ prompt_install_dir() {
 
     if [[ -n "$GUM" ]]; then
         local result
-        result=$("$GUM" input --header "Where should we install DimOS? (${hint})"             --placeholder "$default" --value "$default"             --header.foreground="255" --header.bold             --cursor.foreground="44" </dev/tty)
+        result=$("$GUM" input --header "Where should we install DimOS? (${hint})"             --placeholder "$default" --value "$default"             --header.foreground="255" --header.bold             --cursor.foreground="44" </dev/tty) || { printf "\n" >/dev/tty; exit $CANCELLED_EXIT; }
         [[ -z "$result" ]] && result="$default"
         echo "$result"
     else
@@ -735,7 +738,10 @@ run_post_install_tests() {
     local exit_code=0
     pushd "$dir" >/dev/null
     source "$venv"
-    timeout 60 $cmd || exit_code=$?
+    $cmd &
+    local pid=$!
+    # wait allows bash to process INT trap immediately
+    wait $pid || exit_code=$?
     popd >/dev/null
 
     printf "\n"
@@ -773,13 +779,11 @@ print_quickstart() {
     printf "  %sdiscord:%s    https://discord.gg/dimos\n\n" "$DIM" "$RESET"
 }
 
-# ─── signal handling ──────────────────────────────────────────────────────────
-_interrupted=0
-handle_sigint() { _interrupted=1; printf "\n"; warn "interrupted"; exit 130; }
-trap handle_sigint INT
+# ─── cleanup ─────────────────────────────────────────────────────────────────
 cleanup() {
     local ec=$?
-    [[ $ec -ne 0 ]] && [[ "$_interrupted" != "1" ]] && { printf "\n"; err "installation failed (exit ${ec})"; err "help: https://github.com/dimensionalOS/dimos/issues"; }
+    [[ $ec -eq 130 ]] && { warn "interrupted"; }
+    [[ $ec -ne 0 ]] && [[ $ec -ne 130 ]] && { printf "\n"; err "installation failed (exit ${ec})"; err "help: https://github.com/dimensionalOS/dimos/issues"; }
 }
 trap cleanup EXIT
 
