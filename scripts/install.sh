@@ -113,34 +113,92 @@ prompt_multi() {
     local msg="$1"
     shift
     local -a items=("$@")
+    local count=${#items[@]}
+
     if [[ "$NON_INTERACTIVE" == "1" ]]; then
         local all=""
-        for ((i=1; i<=${#items[@]}; i++)); do
+        for ((i=1; i<=count; i++)); do
             [[ -n "$all" ]] && all+=","
             all+="$i"
         done
         echo "$all"
         return
     fi
-    printf "\n%s%s%s %s(comma-separated numbers, enter for all)%s\n\n" "$BOLD" "$msg" "$RESET" "$DIM" "$RESET"
-    local i=1
-    for item in "${items[@]}"; do
-        printf "  %s%d%s) %s\n" "$CYAN" "$i" "$RESET" "$item"
-        ((i++))
+
+    # Interactive checkbox UI
+    # All items selected by default
+    local -a selected=()
+    for ((i=0; i<count; i++)); do
+        selected+=("1")
     done
-    printf "\n  selection: "
-    local sel
-    read -r sel </dev/tty || sel=""
-    if [[ -z "$sel" ]]; then
-        local all=""
-        for ((i=1; i<=${#items[@]}; i++)); do
-            [[ -n "$all" ]] && all+=","
-            all+="$i"
+    local cursor=0
+
+    # Hide cursor
+    printf "\033[?25l" >/dev/tty
+
+    _draw_multi() {
+        # Move cursor up to redraw (except first draw)
+        if [[ "${1:-}" == "redraw" ]]; then
+            printf "\033[%dA" "$((count + 3))" >/dev/tty
+        fi
+        printf "\n%s%s%s %s(↑/↓ move, space toggle, enter confirm)%s\n\n" \
+            "$BOLD" "$msg" "$RESET" "$DIM" "$RESET" >/dev/tty
+        for ((i=0; i<count; i++)); do
+            local check=" "
+            [[ "${selected[$i]}" == "1" ]] && check="✓"
+            local prefix="  "
+            [[ "$i" == "$cursor" ]] && prefix="❯ "
+            if [[ "$i" == "$cursor" ]]; then
+                printf "%s%s[%s%s%s] %s%s\n" "$prefix" "$CYAN" "$check" "$CYAN" "$RESET$CYAN" "${items[$i]}" "$RESET" >/dev/tty
+            else
+                printf "%s[%s] %s\n" "$prefix" "$check" "${items[$i]}" >/dev/tty
+            fi
         done
-        echo "$all"
-    else
-        echo "$sel"
-    fi
+    }
+
+    _draw_multi "first"
+
+    while true; do
+        # Read single keypress
+        local key
+        IFS= read -rsn1 key </dev/tty
+        if [[ "$key" == $'\x1b' ]]; then
+            read -rsn2 -t 0.1 key </dev/tty
+            case "$key" in
+                '[A') # Up
+                    ((cursor > 0)) && ((cursor--))
+                    ;;
+                '[B') # Down
+                    ((cursor < count - 1)) && ((cursor++))
+                    ;;
+            esac
+            _draw_multi "redraw"
+        elif [[ "$key" == " " ]]; then
+            # Toggle
+            if [[ "${selected[$cursor]}" == "1" ]]; then
+                selected[$cursor]="0"
+            else
+                selected[$cursor]="1"
+            fi
+            _draw_multi "redraw"
+        elif [[ "$key" == "" ]]; then
+            # Enter — confirm
+            break
+        fi
+    done
+
+    # Show cursor
+    printf "\033[?25h" >/dev/tty
+
+    # Build result
+    local result=""
+    for ((i=0; i<count; i++)); do
+        if [[ "${selected[$i]}" == "1" ]]; then
+            [[ -n "$result" ]] && result+=","
+            result+="$((i + 1))"
+        fi
+    done
+    echo "$result"
 }
 
 # ─── ascii banner ─────────────────────────────────────────────────────────────
@@ -542,8 +600,8 @@ install_system_deps() {
     info "installing system dependencies..."
     case "$DETECTED_OS" in
         ubuntu|wsl)
-            run_cmd "sudo apt-get update -qq"
-            run_cmd "sudo apt-get install -y -qq curl g++ portaudio19-dev git-lfs libturbojpeg python3-dev pre-commit"
+            run_cmd "sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get update -qq"
+            run_cmd "sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get install -y -qq curl g++ portaudio19-dev git-lfs libturbojpeg python3-dev pre-commit"
             ;;
         macos)
             if ! has_cmd brew; then
@@ -1087,6 +1145,14 @@ main() {
         mac_major="$(echo "$DETECTED_OS_VERSION" | cut -d. -f1)"
         if [[ "$mac_major" -lt 12 ]] 2>/dev/null; then
             die "macOS ${DETECTED_OS_VERSION} is too old — 12.6+ required"
+        fi
+    fi
+
+    # Confirm before proceeding
+    if [[ "$NON_INTERACTIVE" != "1" ]]; then
+        printf "\n"
+        if ! prompt_yn "  ${CYAN}▸${RESET} ready to install? we\'ll walk you through the setup" "y"; then
+            die "installation cancelled"
         fi
     fi
 
