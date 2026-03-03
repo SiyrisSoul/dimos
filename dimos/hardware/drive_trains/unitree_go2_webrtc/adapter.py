@@ -32,7 +32,7 @@ from typing import TYPE_CHECKING
 from dimos.utils.logging_config import setup_logger
 
 if TYPE_CHECKING:
-    from reactivex.disposable import DisposableBase
+    from reactivex.abc import DisposableBase
 
     from dimos.hardware.drive_trains.registry import TwistBaseAdapterRegistry
     from dimos.msgs.geometry_msgs import Pose
