@@ -328,8 +328,8 @@ class UnitreeG1TwistAdapter:
         """Query the current FSM ID from the robot. Returns None on failure."""
         import json
 
-        from unitree_sdk2py.g1.loco.g1_loco_api import (
-            ROBOT_API_ID_LOCO_GET_FSM_ID,  # type: ignore[import-untyped]
+        from unitree_sdk2py.g1.loco.g1_loco_api import (  # type: ignore[import-untyped]
+            ROBOT_API_ID_LOCO_GET_FSM_ID,
         )
 
         session = self._get_session()
