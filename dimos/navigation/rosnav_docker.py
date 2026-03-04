@@ -36,7 +36,7 @@ try:  # pragma: no cover - import-time environment dependent
         PoseStamped as ROSPoseStamped,
         TwistStamped as ROSTwistStamped,
     )
-    from nav_msgs.msg import Path as ROSPath  # type: ignore[attr-defined]
+    from nav_msgs.msg import Odometry as ROSOdometry, Path as ROSPath  # type: ignore[attr-defined]
     from sensor_msgs.msg import (  # type: ignore[attr-defined]
         CompressedImage as ROSCompressedImage,
         Joy as ROSJoy,
@@ -57,6 +57,7 @@ except ModuleNotFoundError:
     ROSPointStamped = _Stub  # type: ignore[assignment]
     ROSPoseStamped = _Stub  # type: ignore[assignment]
     ROSTwistStamped = _Stub  # type: ignore[assignment]
+    ROSOdometry = _Stub  # type: ignore[assignment]
     ROSPath = _Stub  # type: ignore[assignment]
     ROSCompressedImage = _Stub  # type: ignore[assignment]
     ROSJoy = _Stub  # type: ignore[assignment]
@@ -80,7 +81,7 @@ from dimos.msgs.geometry_msgs import (
 )
 from dimos.msgs.nav_msgs import Path as NavPath
 from dimos.msgs.sensor_msgs import Image, ImageFormat, PointCloud2
-from dimos.msgs.std_msgs import Bool
+from dimos_lcm.std_msgs import Bool
 from dimos.msgs.tf2_msgs.TFMessage import TFMessage
 from dimos.navigation.base import NavigationInterface, NavigationState
 from dimos.utils.logging_config import setup_logger
@@ -285,19 +286,21 @@ class ROSNavConfig(DockerModuleConfig):
 
 
 class ROSNav(
-    Module, NavigationInterface, spec.Nav, spec.GlobalPointcloud, spec.Pointcloud, spec.LocalPlanner
+    Module, NavigationInterface, spec.Nav, spec.LocalPlanner
 ):
     config: ROSNavConfig
     default_config = ROSNavConfig
 
-    goal_req: In[PoseStamped]
+    goal_request: In[PoseStamped]
 
     image: Out[Image]
-    pointcloud: Out[PointCloud2]
+    lidar: Out[PointCloud2]
     global_pointcloud: Out[PointCloud2]
     overall_map: Out[PointCloud2]
+    odom: Out[PoseStamped]
     goal_active: Out[PoseStamped]
-    path_active: Out[NavPath]
+    goal_reached: Out[Bool]
+    path: Out[NavPath]
     cmd_vel: Out[Twist]
 
     _current_position_running: bool = False
@@ -365,6 +368,9 @@ class ROSNav(
 
         self.path_sub = self._node.create_subscription(ROSPath, "/path", self._on_ros_path, 10)
         self.tf_sub = self._node.create_subscription(ROSTFMessage, "/tf", self._on_ros_tf, 10)
+        self.odom_sub = self._node.create_subscription(
+            ROSOdometry, "/odom", self._on_ros_odom, 10
+        )
 
         logger.info("NavigationModule initialized with ROS2 node")
 
@@ -378,7 +384,7 @@ class ROSNav(
         )
         self._spin_thread.start()
 
-        self.goal_req.subscribe(self._on_goal_pose)
+        self.goal_request.subscribe(self._on_goal_pose)
         logger.info("NavigationModule started with ROS2 spinning")
 
     def _spin_node(self) -> None:
@@ -393,6 +399,7 @@ class ROSNav(
 
     def _on_ros_goal_reached(self, msg: ROSBool) -> None:
         self._goal_reach = msg.data
+        self.goal_reached.publish(Bool(data=msg.data))
         if msg.data:
             with self._state_lock:
                 self._goal_reached = True
@@ -411,7 +418,7 @@ class ROSNav(
         self.cmd_vel.publish(_twist_from_ros(msg.twist))
 
     def _on_ros_registered_scan(self, msg: ROSPointCloud2) -> None:
-        self.pointcloud.publish(_pc2_from_ros(msg))
+        self.lidar.publish(_pc2_from_ros(msg))
 
     def _on_ros_global_map(self, msg: ROSPointCloud2) -> None:
         self.global_pointcloud.publish(_pc2_from_ros(msg))
@@ -425,7 +432,20 @@ class ROSNav(
     def _on_ros_path(self, msg: ROSPath) -> None:
         dimos_path = _path_from_ros(msg)
         dimos_path.frame_id = "base_link"
-        self.path_active.publish(dimos_path)
+        self.path.publish(dimos_path)
+
+    def _on_ros_odom(self, msg: "ROSOdometry") -> None:
+        ts = msg.header.stamp.sec + msg.header.stamp.nanosec / 1e9
+        p = msg.pose.pose.position
+        o = msg.pose.pose.orientation
+        self.odom.publish(
+            PoseStamped(
+                ts=ts,
+                frame_id=msg.header.frame_id,
+                position=Vector3(p.x, p.y, p.z),
+                orientation=Quaternion(o.x, o.y, o.z, o.w),
+            )
+        )
 
     def _on_ros_tf(self, msg: ROSTFMessage) -> None:
         ros_tf = _tfmessage_from_ros(msg)

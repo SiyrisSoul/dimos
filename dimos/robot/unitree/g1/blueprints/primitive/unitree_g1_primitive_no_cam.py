@@ -85,31 +85,31 @@ unitree_g1_primitive_no_cam = (
         G1HighLevelDdsSdk.blueprint(),
     )
     .global_config(n_dask_workers=4, robot_model="unitree_g1")
-    .transports(
-        {
-            # G1 uses Twist for movement commands
-            ("cmd_vel", Twist): LCMTransport("/cmd_vel", Twist),
-            ("state_estimation", Odometry): LCMTransport("/state_estimation", Odometry),
-            ("odom", PoseStamped): LCMTransport("/odom", PoseStamped),
-            # Navigation module topics from nav_bot
-            ("goal_req", PoseStamped): LCMTransport("/goal_req", PoseStamped),
-            ("goal_request", PoseStamped): LCMTransport("/goal_req", PoseStamped),
-            ("goal_active", PoseStamped): LCMTransport("/goal_active", PoseStamped),
-            ("path_active", Path): LCMTransport("/path_active", Path),
-            ("path", Path): LCMTransport("/path_active", Path),
-            ("pointcloud", PointCloud2): LCMTransport("/lidar", PointCloud2),
-            ("global_pointcloud", PointCloud2): LCMTransport("/map", PointCloud2),
-            ("overall_map", PointCloud2): LCMTransport("/overall_map", PointCloud2),
-            ("image", Image): LCMTransport("/camera", Image),
-            # Original navigation topics for backwards compatibility
-            ("goal_pose", PoseStamped): LCMTransport("/goal_pose", PoseStamped),
-            ("goal_reached", Bool): LCMTransport("/goal_reached", Bool),
-            ("cancel_goal", Bool): LCMTransport("/cancel_goal", Bool),
-            # Camera topics
-            ("color_image", Image): LCMTransport("/color_image", Image),
-            ("camera_info", CameraInfo): LCMTransport("/camera_info", CameraInfo),
-        }
-    )
+    # .transports(
+    #     {
+    #         # G1 uses Twist for movement commands
+    #         ("cmd_vel", Twist): LCMTransport("/cmd_vel", Twist),
+    #         ("state_estimation", Odometry): LCMTransport("/state_estimation", Odometry),
+    #         ("odom", PoseStamped): LCMTransport("/odom", PoseStamped),
+    #         # Navigation module topics from nav_bot
+    #         ("goal_req", PoseStamped): LCMTransport("/goal_req", PoseStamped),
+    #         ("goal_request", PoseStamped): LCMTransport("/goal_req", PoseStamped),
+    #         ("goal_active", PoseStamped): LCMTransport("/goal_active", PoseStamped),
+    #         ("path_active", Path): LCMTransport("/path_active", Path),
+    #         ("path", Path): LCMTransport("/path_active", Path),
+    #         ("pointcloud", PointCloud2): LCMTransport("/lidar", PointCloud2),
+    #         ("global_pointcloud", PointCloud2): LCMTransport("/map", PointCloud2),
+    #         ("overall_map", PointCloud2): LCMTransport("/overall_map", PointCloud2),
+    #         ("image", Image): LCMTransport("/camera", Image),
+    #         # Original navigation topics for backwards compatibility
+    #         ("goal_pose", PoseStamped): LCMTransport("/goal_pose", PoseStamped),
+    #         ("goal_reached", Bool): LCMTransport("/goal_reached", Bool),
+    #         ("cancel_goal", Bool): LCMTransport("/cancel_goal", Bool),
+    #         # Camera topics
+    #         ("color_image", Image): LCMTransport("/color_image", Image),
+    #         ("camera_info", CameraInfo): LCMTransport("/camera_info", CameraInfo),
+    #     }
+    # )
 )
 
 __all__ = ["unitree_g1_primitive_no_cam"]

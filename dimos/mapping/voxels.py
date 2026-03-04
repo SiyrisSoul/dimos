@@ -133,6 +133,13 @@ class VoxelGridMapper(Module):
             return
 
         pts = pcd.point["positions"].to(self._dev, o3c.float32)
+
+        # Drop NaN/Inf points before voxelization — invalid coords corrupt the hashmap
+        finite_mask = pts.isfinite().all(dim=1)
+        pts = pts[finite_mask]
+        if pts.shape[0] == 0:
+            return
+
         vox = (pts / self.config.voxel_size).floor().to(self._key_dtype)
         keys_Nx3 = vox.contiguous()
 

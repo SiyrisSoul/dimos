@@ -20,9 +20,9 @@ from dimos.msgs.nav_msgs import Path
 
 
 class Nav(Protocol):
-    goal_req: In[PoseStamped]
+    goal_request: In[PoseStamped]
     goal_active: Out[PoseStamped]
-    path_active: Out[Path]
+    path: Out[Path]
     ctrl: Out[Twist]
 
     # identity quaternion (Quaternion(0,0,0,1)) represents "no rotation requested"
