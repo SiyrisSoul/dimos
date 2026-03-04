@@ -16,10 +16,10 @@
 """G1 sim stack with perception, memory, and ROS navigation."""
 
 from dimos.core.blueprints import autoconnect
-from dimos.robot.unitree.g1.blueprints_legacy.basic.unitree_g1_basic_sim_ros import (
+from dimos.robot.unitree.g1.blueprints.basic.unitree_g1_basic_sim_ros import (
     unitree_g1_basic_sim_ros,
 )
-from dimos.robot.unitree.g1.blueprints_legacy.perceptive._perception_and_memory import (
+from dimos.robot.unitree.g1.blueprints.perceptive._perception_and_memory import (
     _perception_and_memory,
 )
 

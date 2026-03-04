@@ -24,7 +24,7 @@ from dimos.core.module import Module
 from dimos.core.stream import Out
 from dimos.msgs.geometry_msgs import PoseStamped, Quaternion, Vector3
 from dimos.navigation.rosnav_docker import ros_nav
-from dimos.robot.unitree.g1.blueprints_legacy.primitive.unitree_g1_primitive_no_cam import (
+from dimos.robot.unitree.g1.blueprints.primitive.unitree_g1_primitive_no_cam import (
     unitree_g1_primitive_no_cam,
 )
 from dimos.utils.logging_config import setup_logger
