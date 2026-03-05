@@ -109,17 +109,16 @@ install_gum() {
 prompt_select() {
     local msg="$1"; shift
     local -a options=("$@")
-    if [[ "$NON_INTERACTIVE" == "1" ]]; then PROMPT_RESULT="${options[0]}"; return; fi
+    if [[ "$NON_INTERACTIVE" == "1" ]]; then echo "${options[0]}"; return; fi
     printf "\n" >/dev/tty
     if [[ -n "$GUM" ]]; then
-        local tmpf; tmpf=$(mktemp)
-        "$GUM" choose --header "$msg" \
+        local result
+        result=$("$GUM" choose --header "$msg" \
             --cursor "● " --cursor.foreground="44" \
             --header.foreground="255" --header.bold \
             --selected.foreground="44" \
-            "${options[@]}" </dev/tty >"$tmpf"
-        local ec=$?; PROMPT_RESULT=$(<"$tmpf"); rm -f "$tmpf"
-        [[ $ec -ne 0 ]] && die "cancelled"
+            "${options[@]}" </dev/tty) || { printf "\n" >/dev/tty; exit $CANCELLED_EXIT; }
+        echo "$result"
     else
         printf "%s%s%s\n" "$BOLD" "$msg" "$RESET" >/dev/tty
         local i=1
@@ -128,13 +127,13 @@ prompt_select() {
             ((i++))
         done
         printf "  choice [1]: " >/dev/tty
-        local choice; read -r choice </dev/tty || die "cancelled"
+        local choice; read -r choice </dev/tty || { printf "\n" >/dev/tty; exit $CANCELLED_EXIT; }
         choice="${choice:-1}"
         local idx=$((choice - 1))
         if [[ $idx -ge 0 ]] && [[ $idx -lt ${#options[@]} ]]; then
-            PROMPT_RESULT="${options[$idx]}"
+            echo "${options[$idx]}"
         else
-            PROMPT_RESULT="${options[0]}"
+            echo "${options[0]}"
         fi
     fi
 }
@@ -142,17 +141,16 @@ prompt_select() {
 prompt_multi() {
     local msg="$1"; shift
     local -a options=("$@")
-    if [[ "$NON_INTERACTIVE" == "1" ]]; then PROMPT_RESULT=$(printf '%s\n' "${options[@]}"); return; fi
+    if [[ "$NON_INTERACTIVE" == "1" ]]; then printf '%s\n' "${options[@]}"; return; fi
     printf "\n" >/dev/tty
     if [[ -n "$GUM" ]]; then
-        local tmpf; tmpf=$(mktemp)
-        "$GUM" choose --no-limit --header "$msg  (space to toggle, enter to confirm)" \
+        local result
+        result=$("$GUM" choose --no-limit --header "$msg  (space to toggle, enter to confirm)" \
             --cursor "❯ " --cursor.foreground="44" \
             --header.foreground="255" --header.bold \
             --selected.foreground="44" \
-            "${options[@]}" </dev/tty >"$tmpf"
-        local ec=$?; PROMPT_RESULT=$(<"$tmpf"); rm -f "$tmpf"
-        [[ $ec -ne 0 ]] && die "cancelled"
+            "${options[@]}" </dev/tty) || { printf "\n" >/dev/tty; exit $CANCELLED_EXIT; }
+        echo "$result"
     else
         printf "%s%s%s (comma-separated, enter for all)\n" "$BOLD" "$msg" "$RESET" >/dev/tty
         local i=1
@@ -163,18 +161,13 @@ prompt_multi() {
         printf "  selection: " >/dev/tty
         local sel; read -r sel </dev/tty || sel=""
         if [[ -z "$sel" ]]; then
-            PROMPT_RESULT=$(printf '%s\n' "${options[@]}")
+            printf '%s\n' "${options[@]}"
         else
-            local out=""
             IFS=',' read -ra nums <<< "$sel"
             for n in "${nums[@]}"; do
                 n="${n// /}"; local idx=$((n - 1))
-                if [[ $idx -ge 0 ]] && [[ $idx -lt ${#options[@]} ]]; then
-                    [[ -n "$out" ]] && out+=$'\n'
-                    out+="${options[$idx]}"
-                fi
+                if [[ $idx -ge 0 ]] && [[ $idx -lt ${#options[@]} ]]; then echo "${options[$idx]}"; fi
             done
-            PROMPT_RESULT="$out"
         fi
     fi
 }
@@ -452,17 +445,15 @@ prompt_setup_method() {
 
     local choice
     if [[ "$HAS_NIX" == "1" ]]; then
-        prompt_select "How should we set up system dependencies?" \
+        choice=$(prompt_select "How should we set up system dependencies?" \
             "System packages — apt/brew (simpler)" \
-            "Nix — nix develop (reproducible)"
-        choice="$PROMPT_RESULT"
+            "Nix — nix develop (reproducible)") || die "cancelled"
     elif [[ "$DETECTED_OS" == "nixos" ]]; then
         die "NixOS detected but 'nix' command not found."
     else
-        prompt_select "How should we set up system dependencies?" \
+        choice=$(prompt_select "How should we set up system dependencies?" \
             "System packages — apt/brew (recommended)" \
-            "Install Nix — nix develop (reproducible, installs Nix first)"
-        choice="$PROMPT_RESULT"
+            "Install Nix — nix develop (reproducible, installs Nix first)") || die "cancelled"
     fi
 
     case "$choice" in
@@ -559,10 +550,9 @@ install_uv() {
 prompt_install_mode() {
     [[ -n "$INSTALL_MODE" ]] && return
     local choice
-    prompt_select "How do you want to use DimOS?" \
+    choice=$(prompt_select "How do you want to use DimOS?" \
         "Library — pip install into your project (recommended)" \
-        "Developer — git clone + editable install (contributors)"
-    choice="$PROMPT_RESULT"
+        "Developer — git clone + editable install (contributors)") || die "cancelled"
     case "$choice" in *Library*) INSTALL_MODE="library";; *) INSTALL_MODE="dev";; esac
 }
 
@@ -572,18 +562,16 @@ prompt_extras() {
 
     local -a platform_sel=() feature_sel=()
     local _platforms _features
-    prompt_multi \
+    _platforms=$(prompt_multi \
         "Which robot platforms will you use?" \
-        "Unitree (Go2, G1, B1)" "Drone (Mavlink / DJI)" "Manipulators (xArm, Piper, OpenARMs)"
-    _platforms="$PROMPT_RESULT"
+        "Unitree (Go2, G1, B1)" "Drone (Mavlink / DJI)" "Manipulators (xArm, Piper, OpenARMs)") || die "cancelled"
     while IFS= read -r line; do [[ -n "$line" ]] && platform_sel+=("$line"); done <<< "$_platforms"
 
-    prompt_multi \
+    _features=$(prompt_multi \
         "Which features do you need?" \
         "AI Agents (LangChain, voice control)" "Perception (object detection, VLMs)" \
         "Visualization (Rerun 3D viewer)" "Simulation (MuJoCo)" \
-        "Web Interface (FastAPI dashboard)" "Misc (extra ML models)"
-    _features="$PROMPT_RESULT"
+        "Web Interface (FastAPI dashboard)" "Misc (extra ML models)") || die "cancelled"
     while IFS= read -r line; do [[ -n "$line" ]] && feature_sel+=("$line"); done <<< "$_features"
 
     local -a extras_list=()
