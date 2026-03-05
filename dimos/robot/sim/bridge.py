@@ -131,7 +131,11 @@ class DimSimBridge(NativeModule, spec.Camera, spec.Pointcloud):
             logger.info(f"Using local DimSim: {cli_ts}")
             self.config.executable = _find_deno()
             self.config.extra_args = [
-                "run", "--allow-all", "--unstable-net", str(cli_ts), *dev_args,
+                "run",
+                "--allow-all",
+                "--unstable-net",
+                str(cli_ts),
+                *dev_args,
             ]
             self.config.cwd = None
             return
@@ -160,7 +164,9 @@ class DimSimBridge(NativeModule, spec.Camera, spec.Pointcloud):
             try:
                 result = subprocess.run(
                     [dimsim, "--version"],
-                    capture_output=True, text=True, timeout=5,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
                 )
                 installed_ver = result.stdout.strip() if result.returncode == 0 else None
             except Exception:

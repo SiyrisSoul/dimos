@@ -21,7 +21,7 @@ from dimos.core.global_config import global_config
 from dimos.core.transport import JpegLcmTransport
 from dimos.msgs.sensor_msgs import Image
 from dimos.protocol.pubsub.encoders import DecodingError
-from dimos.protocol.pubsub.impl.lcmpubsub import JpegLCM, LCM
+from dimos.protocol.pubsub.impl.lcmpubsub import LCM, JpegLCM
 from dimos.robot.sim.bridge import sim_bridge
 from dimos.robot.sim.tf_module import sim_tf
 from dimos.web.websocket_vis.websocket_vis_module import websocket_vis
