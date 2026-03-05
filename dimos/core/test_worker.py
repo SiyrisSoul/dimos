@@ -21,10 +21,10 @@ from dimos.core.core import rpc
 from dimos.core.docker_runner import DockerModuleConfig, is_docker_module
 from dimos.core.global_config import global_config
 from dimos.core.module import Module
+from dimos.core.module_coordinator import ModuleCoordinator
 from dimos.core.rpc_client import RPCClient
 from dimos.core.stream import In, Out
 from dimos.core.worker_docker import DockerRPCClient, WorkerDocker
-from dimos.core.worker_manager import WorkerManager
 from dimos.msgs.geometry_msgs import Vector3
 
 if TYPE_CHECKING:
@@ -86,25 +86,25 @@ class ThirdModule(Module):
 
 
 @pytest.fixture
-def create_worker_manager():
-    manager = None
+def create_coordinator():
+    dimos = None
 
-    def _create(n_workers):
-        nonlocal manager
-        manager = WorkerManager(n_workers=n_workers)
-        manager.start()
-        return manager
+    def _create():
+        nonlocal dimos
+        dimos = ModuleCoordinator()
+        dimos.start()
+        return dimos
 
     yield _create
 
-    if manager is not None:
-        manager.close_all()
+    if dimos is not None:
+        dimos.stop()
 
 
 @pytest.mark.slow
-def test_worker_manager_basic(create_worker_manager):
-    worker_manager = create_worker_manager(n_workers=2)
-    module = worker_manager.deploy(SimpleModule, global_config, {})
+def test_worker_manager_basic(create_coordinator):
+    dimos = create_coordinator()
+    module = dimos.deploy(SimpleModule, global_config)
     module.start()
 
     result = module.increment()
@@ -120,10 +120,10 @@ def test_worker_manager_basic(create_worker_manager):
 
 
 @pytest.mark.slow
-def test_worker_manager_multiple_different_modules(create_worker_manager):
-    worker_manager = create_worker_manager(n_workers=2)
-    module1 = worker_manager.deploy(SimpleModule, global_config, {})
-    module2 = worker_manager.deploy(AnotherModule, global_config, {})
+def test_worker_manager_multiple_different_modules(create_coordinator):
+    dimos = create_coordinator()
+    module1 = dimos.deploy(SimpleModule, global_config)
+    module2 = dimos.deploy(AnotherModule, global_config)
 
     module1.start()
     module2.start()
@@ -142,9 +142,9 @@ def test_worker_manager_multiple_different_modules(create_worker_manager):
 
 
 @pytest.mark.slow
-def test_worker_manager_parallel_deployment(create_worker_manager):
-    worker_manager = create_worker_manager(n_workers=2)
-    modules = worker_manager.deploy_parallel(
+def test_worker_manager_parallel_deployment(create_coordinator):
+    dimos = create_coordinator()
+    modules = dimos.deploy_parallel(
         [
             (SimpleModule, (), {}),
             (AnotherModule, (), {}),
@@ -176,12 +176,12 @@ def test_worker_manager_parallel_deployment(create_worker_manager):
 
 
 @pytest.mark.slow
-def test_collect_stats(create_worker_manager):
+def test_collect_stats(create_coordinator):
     from dimos.core.resource_monitor.monitor import StatsMonitor
 
-    manager = create_worker_manager(n_workers=2)
-    module1 = manager.deploy(SimpleModule, global_config, {})
-    module2 = manager.deploy(AnotherModule, global_config, {})
+    dimos = create_coordinator()
+    module1 = dimos.deploy(SimpleModule, global_config)
+    module2 = dimos.deploy(AnotherModule, global_config)
     module1.start()
     module2.start()
 
@@ -192,7 +192,7 @@ def test_collect_stats(create_worker_manager):
         def log_stats(self, coordinator, workers):
             captured.append(workers)
 
-    monitor = StatsMonitor(manager, resource_logger=CapturingLogger(), interval=0.5)
+    monitor = StatsMonitor(dimos, resource_logger=CapturingLogger(), interval=0.5)
     monitor.start()
     import time
 
@@ -222,10 +222,10 @@ def test_collect_stats(create_worker_manager):
 
 
 @pytest.mark.slow
-def test_worker_pool_modules_share_workers(create_worker_manager):
-    manager = create_worker_manager(n_workers=1)
-    module1 = manager.deploy(SimpleModule, global_config, {})
-    module2 = manager.deploy(AnotherModule, global_config, {})
+def test_worker_pool_modules_share_workers(create_coordinator):
+    dimos = create_coordinator()
+    module1 = dimos.deploy(SimpleModule, global_config)
+    module2 = dimos.deploy(AnotherModule, global_config)
 
     module1.start()
     module2.start()
@@ -238,9 +238,10 @@ def test_worker_pool_modules_share_workers(create_worker_manager):
     assert module1.get_counter() == 2
     assert module2.get_value() == 110
 
-    # Verify only 1 worker process was used
-    assert len(manager._workers) == 1
-    assert manager._workers[0].module_count == 2
+    # Verify modules are distributed across workers (default is 2 workers)
+    assert len(dimos._workers) == 2
+    total_modules = sum(w.module_count for w in dimos._workers)
+    assert total_modules == 2
 
     module1.stop()
     module2.stop()
@@ -275,7 +276,7 @@ def test_is_docker_module_detection():
 
 def test_docker_module_routes_to_docker_worker():
     """deploy() routes Docker modules through WorkerDocker, not regular Workers."""
-    manager = WorkerManager(n_workers=1)
+    dimos = ModuleCoordinator()
     try:
         with patch.object(WorkerDocker, "deploy_module") as mock_deploy:
             from unittest.mock import MagicMock
@@ -286,20 +287,18 @@ def test_docker_module_routes_to_docker_worker():
             fake_client = DockerRPCClient(fake_dm, FakeDockerModule)
             mock_deploy.return_value = fake_client
 
-            result = manager.deploy(FakeDockerModule, global_config, {})
+            result = dimos.deploy(FakeDockerModule, global_config)
 
-            mock_deploy.assert_called_once_with(
-                FakeDockerModule, global_config, kwargs={}
-            )
+            mock_deploy.assert_called_once_with(FakeDockerModule, global_config, kwargs={})
             assert isinstance(result, DockerRPCClient)
             assert isinstance(result, RPCClient)
     finally:
-        manager.close_all()
+        dimos.stop()
 
 
 def test_docker_module_not_in_deploy_parallel_regular_path():
     """deploy_parallel() separates Docker modules from regular ones."""
-    manager = WorkerManager(n_workers=1)
+    dimos = ModuleCoordinator()
     try:
         with patch.object(WorkerDocker, "deploy_module") as mock_docker:
             from unittest.mock import MagicMock
@@ -310,12 +309,14 @@ def test_docker_module_not_in_deploy_parallel_regular_path():
             fake_client = DockerRPCClient(fake_dm, FakeDockerModule)
             mock_docker.return_value = fake_client
 
-            results = manager.deploy_parallel([
-                (FakeDockerModule, global_config, {}),
-            ])
+            results = dimos.deploy_parallel(
+                [
+                    (FakeDockerModule, global_config, {}),
+                ]
+            )
 
             assert len(results) == 1
             mock_docker.assert_called_once()
             assert isinstance(results[0], DockerRPCClient)
     finally:
-        manager.close_all()
+        dimos.stop()
