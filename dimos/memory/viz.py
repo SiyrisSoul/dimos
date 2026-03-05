@@ -30,6 +30,20 @@ if TYPE_CHECKING:
     from dimos.msgs.nav_msgs.OccupancyGrid import OccupancyGrid
 
 
+def _normalize_similarities(values: np.ndarray, *, floor_percentile: float = 20.0) -> np.ndarray:
+    """Min-max normalize, then cut bottom percentile to 0 and re-stretch to 0-1."""
+    if len(values) == 0:
+        return values
+    vmin, vmax = float(values.min()), float(values.max())
+    vrange = vmax - vmin
+    normed = (values - vmin) / vrange if vrange > 0 else np.full_like(values, 0.5)
+    floor = float(np.percentile(normed, floor_percentile))
+    denom = 1.0 - floor
+    if denom > 0:
+        normed = np.clip((normed - floor) / denom, 0.0, 1.0)
+    return normed
+
+
 def similarity_heatmap(
     observations: list[Observation] | Any,
     *,
@@ -89,11 +103,9 @@ def similarity_heatmap(
     width = max(1, int((max_x - min_x) / resolution) + 1)
     height = max(1, int((max_y - min_y) / resolution) + 1)
 
-    # Normalize similarities to 0-1 (CLIP similarities cluster in a narrow band)
+    # Normalize: min-max, cut bottom 20%, re-stretch to 0-1
     sims = np.array([s for _, _, s in posed])
-    sim_min, sim_max = float(sims.min()), float(sims.max())
-    sim_range = sim_max - sim_min
-    sims_norm = (sims - sim_min) / sim_range if sim_range > 0 else np.full_like(sims, 0.5)
+    sims_norm = _normalize_similarities(sims)
 
     # Stamp normalized values onto a float grid (0 = no observation)
     value_grid = np.zeros((height, width), dtype=np.float32)
@@ -124,8 +136,8 @@ def similarity_heatmap(
     grid = np.full((height, width), -1, dtype=np.int8)
     active = heatmap > 0
     grid[active] = (heatmap[active] * 100).clip(0, 100).astype(np.int8)
-    # Ensure dot cells themselves are always visible
-    grid[has_obs] = (value_grid[has_obs] * 100).clip(1, 100).astype(np.int8)
+    # Ensure dot cells are present (0 = black for bottom percentile)
+    grid[has_obs] = (value_grid[has_obs] * 100).clip(50, 100).astype(np.int8)
 
     origin = Pose(
         position=[min_x, min_y, 0.0],
@@ -157,8 +169,8 @@ def log_similarity_timeline(
 ) -> None:
     """Log similarity scores as a Rerun time-series plot.
 
-    Each observation is logged at its timestamp with its similarity score.
-    Rerun auto-generates an interactive time-series graph in the timeline panel.
+    Observations are sorted by timestamp so the plot shows temporal similarity
+    bumps rather than a descending curve (search results are ranked by similarity).
 
     Args:
         observations: Iterable of EmbeddingObservation with .similarity and .ts.
@@ -168,10 +180,75 @@ def log_similarity_timeline(
 
     from dimos.memory.types import EmbeddingObservation
 
-    for obs in observations:
-        if not isinstance(obs, EmbeddingObservation):
+    sorted_obs = sorted(
+        (
+            obs
+            for obs in observations
+            if isinstance(obs, EmbeddingObservation)
+            and obs.similarity is not None
+            and obs.ts is not None
+        ),
+        key=lambda o: o.ts,  # type: ignore[arg-type]
+    )
+    if not sorted_obs:
+        return
+
+    # Normalize: cut bottom 20%, re-stretch to 0-1
+    raw_sims = np.array([obs.similarity for obs in sorted_obs])
+    normed = _normalize_similarities(raw_sims)
+
+    # Disable wall-clock timelines so Rerun defaults to our custom "time" axis
+    rr.disable_timeline("log_time")
+    rr.disable_timeline("log_tick")
+
+    # Lock Y-axis to 0-1
+    from rerun.blueprint import ScalarAxis
+
+    rr.set_time("time", duration=0.0)
+    rr.log(entity_path, ScalarAxis(range=(0.0, 1.0), zoom_lock=True), static=True)
+
+    for obs, sim in zip(sorted_obs, normed, strict=True):
+        rr.set_time("time", duration=obs.ts)  # type: ignore[arg-type]
+        rr.log(entity_path, rr.Scalars(float(sim)))
+    rr.reset_time()
+
+
+def log_top_images(
+    observations: list[Observation] | Any,
+    entity_path: str = "memory/top_matches",
+    *,
+    n: int = 6,
+) -> None:
+    """Log the top-N matching images to Rerun as a grid.
+
+    Observations must have ``.data`` that is a dimos Image (with ``.to_rerun()``).
+    Sorted by similarity (highest first), limited to *n*.
+
+    Args:
+        observations: Iterable of EmbeddingObservation with .similarity and .data (Image).
+        entity_path: Rerun entity path prefix. Images logged as ``{entity_path}/{rank}``.
+        n: Number of top images to log.
+    """
+    import rerun as rr
+
+    from dimos.memory.types import EmbeddingObservation
+
+    ranked = [
+        obs
+        for obs in observations
+        if isinstance(obs, EmbeddingObservation) and obs.similarity is not None
+    ]
+    ranked.sort(key=lambda o: o.similarity or 0.0, reverse=True)  # type: ignore[union-attr]
+
+    for i, obs in enumerate(ranked[:n]):
+        try:
+            img = obs.data
+            if hasattr(img, "to_rerun"):
+                rr.log(f"{entity_path}/{i + 1}", img.to_rerun())
+            else:
+                import numpy as np_inner
+
+                arr = np_inner.asarray(img)
+                rr.log(f"{entity_path}/{i + 1}", rr.Image(arr))
+        except Exception:
             continue
-        if obs.similarity is None or obs.ts is None:
-            continue
-        rr.set_time("memory_time", timestamp=obs.ts)
-        rr.log(entity_path, rr.Scalars(obs.similarity))

@@ -273,12 +273,20 @@ class Stream(Generic[T]):
 
     def fetch_pages(self, batch_size: int = 128) -> Iterator[list[Observation]]:
         offset = self._query.offset_val or 0
+        total_limit = self._query.limit_val
+        emitted = 0
         while True:
+            page_size = batch_size
+            if total_limit is not None:
+                remaining = total_limit - emitted
+                if remaining <= 0:
+                    break
+                page_size = min(batch_size, remaining)
             q = StreamQuery(
                 filters=self._query.filters,
                 order_field=self._query.order_field or "id",
                 order_desc=self._query.order_desc,
-                limit_val=batch_size,
+                limit_val=page_size,
                 offset_val=offset,
             )
             backend = self._require_backend()
@@ -286,9 +294,10 @@ class Stream(Generic[T]):
             if not page:
                 break
             yield page
-            if len(page) < batch_size:
+            emitted += len(page)
+            if len(page) < page_size:
                 break
-            offset += batch_size
+            offset += len(page)
 
     def one(self) -> Observation:
         results = self.limit(1).fetch()

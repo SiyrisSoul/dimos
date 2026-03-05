@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Ingest 5min robot video → sharpness filter → CLIP embed → search & visualize.
+"""E2E tests: ingest 5min robot video → sharpness filter → CLIP embed → search.
 
-Caches the DB — re-run to just search without re-ingesting/embedding.
-Outputs heatmaps and timelines to Rerun, images to disk.
+The DB is built once and cached on disk so subsequent runs skip ingestion.
+Run with:  pytest dimos/memory/impl/run_e2e_export.py -s
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import rerun as rr
+import pytest
 
 from dimos.memory.impl.sqlite import SqliteStore
 from dimos.memory.ingest import ingest
@@ -32,106 +32,131 @@ from dimos.memory.transformer import (
     EmbeddingTransformer,
     QualityWindowTransformer,
 )
-from dimos.memory.viz import log_similarity_timeline, similarity_heatmap
 from dimos.models.embedding.clip import CLIPModel
-from dimos.models.vl.florence import Florence2Model
 from dimos.msgs.sensor_msgs.Image import Image
 from dimos.utils.testing import TimedSensorReplay
 
 if TYPE_CHECKING:
     from dimos.memory.stream import EmbeddingStream
 
-OUT_DIR = Path(__file__).parent / "e2e_matches"
-OUT_DIR.mkdir(exist_ok=True)
+DB_DIR = Path(__file__).parent / "e2e_matches"
+DB_DIR.mkdir(exist_ok=True)
+DB_PATH = DB_DIR / "e2e.db"
 
-rr.init("memory_e2e", spawn=True)
 
-db_path = OUT_DIR / "e2e.db"
-store = SqliteStore(str(db_path))
-session = store.session()
+@pytest.fixture(scope="module")
+def clip() -> CLIPModel:
+    model = CLIPModel()
+    model.start()
+    return model
 
-# Check if we already have data
-existing = {s.name for s in session.list_streams()}
-need_build = "clip_embeddings" not in existing
 
-if need_build:
-    replay = TimedSensorReplay("unitree_go2_bigoffice/video")
-    odom = TimedSensorReplay("unitree_go2_bigoffice/odom")
+@pytest.fixture(scope="module")
+def e2e_db(clip: CLIPModel) -> tuple[SqliteStore, Any]:
+    """Build (or reuse cached) e2e DB with video → sharpness → CLIP embeddings."""
+    store = SqliteStore(str(DB_PATH))
+    session = store.session()
 
-    print("Loading CLIP...")
-    clip = CLIPModel()
-    clip.start()
+    existing = {s.name for s in session.list_streams()}
+    if "clip_embeddings" not in existing:
+        replay = TimedSensorReplay("unitree_go2_bigoffice/video")
+        odom = TimedSensorReplay("unitree_go2_bigoffice/odom")
 
-    # 1. Ingest 5 minutes with odom poses
-    print("Ingesting 5 min of video with odom poses...")
-    raw = session.stream("raw_video", Image)
-    n = ingest(raw, replay.iterate_ts(seek=5.0, duration=300.0), pose_source=odom)
-    print(f"  {n} frames ingested")
+        raw = session.stream("raw_video", Image)
+        n = ingest(raw, replay.iterate_ts(seek=5.0, duration=300.0), pose_source=odom)
+        print(f"  {n} frames ingested")
 
-    # 2. Sharpness filter
-    print("Filtering by sharpness (0.5s windows)...")
-    sharp = raw.transform(QualityWindowTransformer(lambda img: img.sharpness, window=0.5)).store(
-        "sharp_frames", Image
-    )
-    n_sharp = sharp.count()
-    print(f"  {n_sharp} sharp frames (from {n}, {n_sharp / n:.0%} kept)")
+        sharp = raw.transform(
+            QualityWindowTransformer(lambda img: img.sharpness, window=0.5)
+        ).store("sharp_frames", Image)
+        print(f"  {sharp.count()} sharp frames (from {n}, {sharp.count() / n:.0%} kept)")
 
-    # 3. Embed
-    print("Embedding with CLIP...")
-    embeddings: EmbeddingStream[Any] = sharp.transform(EmbeddingTransformer(clip)).store(
-        "clip_embeddings"
-    )  # type: ignore[assignment]
-    print(f"  {embeddings.count()} embeddings stored")
-else:
-    print(f"Using cached DB ({db_path})")
-    print("loading Clip")
-    clip = CLIPModel()
-    clip.start()
-    print("done")
-    sharp = session.stream("sharp_frames")
-    embeddings = session.embedding_stream("clip_embeddings", embedding_model=clip)
-    print(f"  {sharp.count()} sharp frames, {embeddings.count()} embeddings")
+        embeddings: EmbeddingStream[Any] = sharp.transform(EmbeddingTransformer(clip)).store(
+            "clip_embeddings"
+        )  # type: ignore[assignment]
+        print(f"  {embeddings.count()} embeddings stored")
+    else:
+        print(f"Using cached DB ({DB_PATH})")
 
-# 4. Search, visualize, export
-queries = [
-    "a hallway in an office",
-    "a person standing",
-    "a door",
-    "a desk",
-    "supermarket",
-    "large room",
-]
+    yield store, session  # type: ignore[misc]
+    session.close()
+    store.close()
 
-print("\nLoading Florence2 for captioning...")
-captioner = Florence2Model()
-captioner.start()
 
-caption_xf = CaptionTransformer(captioner)
+@pytest.fixture(scope="module")
+def embeddings(e2e_db: tuple[SqliteStore, Any], clip: CLIPModel) -> EmbeddingStream[Any]:
+    _, session = e2e_db
+    return session.embedding_stream("clip_embeddings", embedding_model=clip)
 
-for query_text in queries:
-    print(f"\nQuery: '{query_text}'")
-    slug = query_text.replace(" ", "_")[:30]
 
-    # raw=True: get EmbeddingObservation with .similarity and .pose
-    raw_results = embeddings.search_embedding(query_text, k=200, raw=True).fetch()
+class TestEmbeddingSearch:
+    """Search the cached CLIP embedding DB and export top matches."""
 
-    # Spatial heatmap → Rerun
-    grid = similarity_heatmap(raw_results, resolution=0.5)
-    print(f"  Heatmap: {grid}")
-    rr.log(f"world/{slug}/heatmap", grid.to_rerun(colormap="inferno"))
+    QUERIES = [
+        "a hallway in an office",
+        "a person standing",
+        "a door",
+        "a desk",
+        "supermarket",
+        "large room",
+    ]
 
-    # Temporal timeline → Rerun
-    log_similarity_timeline(raw_results, entity_path=f"plots/{slug}")
+    @pytest.mark.parametrize("query", QUERIES)
+    def test_search_returns_results(self, embeddings: EmbeddingStream[Any], query: str) -> None:
+        results = embeddings.search_embedding(query, k=5).fetch()
+        assert len(results) > 0
+        for obs in results:
+            assert obs.ts is not None
+            assert isinstance(obs.data, Image)
 
-    # Caption top 5 (auto-projected results for image access)
-    results = embeddings.search_embedding(query_text, k=5).fetch()
-    captions = results.transform(caption_xf).fetch()
+    @pytest.mark.parametrize("query", QUERIES)
+    def test_search_exports_images(self, embeddings: EmbeddingStream[Any], query: str) -> None:
+        slug = query.replace(" ", "_")[:30]
+        results = embeddings.search_embedding(query, k=5).fetch()
 
-    for rank, (cap, img) in enumerate(zip(captions, results, strict=False)):
-        fname = OUT_DIR / f"{slug}_{rank + 1}_id{img.id}_ts{img.ts:.0f}.jpg"
-        img.data.save(str(fname))
-        print(f"  [{rank + 1}] id={img.id} ts={img.ts:.2f} — {cap.data}")
+        for rank, img in enumerate(results):
+            fname = DB_DIR / f"{slug}_{rank + 1}_id{img.id}_ts{img.ts:.0f}.jpg"
+            img.data.save(str(fname))
+            print(f"  [{rank + 1}] id={img.id} ts={img.ts:.2f}")
 
-session.close()
-store.close()
-print(f"\nDone. Results in {OUT_DIR}/")
+    def test_raw_search_has_similarity(self, embeddings: EmbeddingStream[Any]) -> None:
+        from dimos.memory.types import EmbeddingObservation
+
+        raw = embeddings.search_embedding("a hallway", k=10, raw=True).fetch()
+        assert len(raw) > 0
+        for obs in raw:
+            assert isinstance(obs, EmbeddingObservation)
+            assert obs.similarity is not None
+            assert 0.0 <= obs.similarity <= 1.0
+
+    def test_caption_search_results(self, embeddings: EmbeddingStream[Any]) -> None:
+        from dimos.models.vl.florence import Florence2Model
+
+        captioner = Florence2Model()
+        captioner.start()
+        caption_xf = CaptionTransformer(captioner)
+
+        results = embeddings.search_embedding("a door", k=3).fetch()
+        captions = results.transform(caption_xf).fetch()
+
+        assert len(captions) == len(results)
+        for cap in captions:
+            assert isinstance(cap.data, str)
+            assert len(cap.data) > 0
+            print(f"  Caption: {cap.data}")
+
+
+class TestRerunStream:
+    """Send a full image stream to Rerun."""
+
+    def test_stream_to_rerun(self, e2e_db: tuple[SqliteStore, Any]) -> None:
+        import rerun as rr
+
+        from dimos.memory.rerun import to_rerun
+
+        rr.init("memory_e2e_test", spawn=True)
+
+        _, session = e2e_db
+        n = to_rerun(session.stream("sharp_frames"))
+        assert n > 0
+        print(f"  Logged {n} images to Rerun")
