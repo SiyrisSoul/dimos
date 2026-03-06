@@ -114,6 +114,31 @@ async def _handle_tools_call(
     return _jsonrpc_result_text(req_id, str(result))
 
 
+def _handle_dimos_status(req_id: Any) -> dict[str, Any]:
+    """Return running modules, skills, and server info."""
+    import os
+
+    skills = app.state.skills
+    return _jsonrpc_result(
+        req_id,
+        {
+            "pid": os.getpid(),
+            "modules": list({s.class_name for s in skills}),
+            "skills": [s.func_name for s in skills],
+            "skill_count": len(skills),
+        },
+    )
+
+
+def _handle_dimos_list_modules(req_id: Any) -> dict[str, Any]:
+    """Return module names and their skills."""
+    skills = app.state.skills
+    modules: dict[str, list[str]] = {}
+    for s in skills:
+        modules.setdefault(s.class_name, []).append(s.func_name)
+    return _jsonrpc_result(req_id, {"modules": modules})
+
+
 async def handle_request(
     request: dict[str, Any],
     skills: list[SkillInfo],
@@ -138,6 +163,10 @@ async def handle_request(
         return _handle_tools_list(req_id, skills)
     if method == "tools/call":
         return await _handle_tools_call(req_id, params, rpc_calls)
+    if method == "dimos/status":
+        return _handle_dimos_status(req_id)
+    if method == "dimos/list_modules":
+        return _handle_dimos_list_modules(req_id)
     return _jsonrpc_error(req_id, -32601, f"Unknown: {method}")
 
 

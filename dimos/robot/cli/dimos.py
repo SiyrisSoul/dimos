@@ -187,6 +187,11 @@ def run(
             config_overrides=cli_config_overrides,
         )
         entry.save()
+
+        from dimos.core.agent_context import generate_context
+
+        generate_context(coordinator, blueprint_name, run_id, log_dir)
+
         install_signal_handlers(entry, coordinator)
         coordinator.loop()
     else:
@@ -200,6 +205,11 @@ def run(
             config_overrides=cli_config_overrides,
         )
         entry.save()
+
+        from dimos.core.agent_context import generate_context
+
+        generate_context(coordinator, blueprint_name, run_id, log_dir)
+
         try:
             coordinator.loop()
         finally:
@@ -250,7 +260,7 @@ def stop(
     _stop_entry(entry, force=force)
 
 
-def _stop_entry(entry: "RunEntry", force: bool = False) -> None:
+def _stop_entry(entry: Any, force: bool = False) -> None:
     """Stop a single DimOS instance by registry entry."""
     from dimos.core.run_registry import stop_entry
 
@@ -258,6 +268,101 @@ def _stop_entry(entry: "RunEntry", force: bool = False) -> None:
     typer.echo(f"Stopping {entry.run_id} (PID {entry.pid}) with {sig_name}...")
     msg, _ok = stop_entry(entry, force=force)
     typer.echo(f"  {msg}")
+
+
+# ---------------------------------------------------------------------------
+# MCP subcommands
+# ---------------------------------------------------------------------------
+
+mcp_app = typer.Typer(help="Interact with the running MCP server")
+main.add_typer(mcp_app, name="mcp")
+
+
+def _mcp_call(
+    method: str, params: dict[str, Any] | None = None, port: int = 9990
+) -> dict[str, Any]:
+    """Send a JSON-RPC request to the running MCP server."""
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    payload: dict[str, Any] = {"jsonrpc": "2.0", "id": 1, "method": method}
+    if params:
+        payload["params"] = params
+
+    data = _json.dumps(payload).encode()
+    req = urllib.request.Request(
+        f"http://localhost:{port}/mcp",
+        data=data,
+        headers={"Content-Type": "application/json"},
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            result: dict[str, Any] = _json.loads(resp.read())
+            return result
+    except urllib.error.URLError:
+        typer.echo("Error: no running MCP server (is DimOS running?)", err=True)
+        raise typer.Exit(1)
+    except Exception as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@mcp_app.command("list-tools")
+def mcp_list_tools() -> None:
+    """List available MCP tools (skills)."""
+    import json
+
+    result = _mcp_call("tools/list")
+    tools = result.get("result", {}).get("tools", [])
+    typer.echo(json.dumps(tools, indent=2))
+
+
+@mcp_app.command("call")
+def mcp_call_tool(
+    tool_name: str = typer.Argument(..., help="Tool name to call"),
+    args: list[str] = typer.Option([], "--arg", "-a", help="Arguments as key=value"),
+) -> None:
+    """Call an MCP tool by name."""
+    import json
+
+    arguments = {}
+    for arg in args:
+        if "=" not in arg:
+            typer.echo(f"Error: argument must be key=value, got: {arg}", err=True)
+            raise typer.Exit(1)
+        key, value = arg.split("=", 1)
+        # Try to parse as JSON for non-string types
+        try:
+            arguments[key] = json.loads(value)
+        except (json.JSONDecodeError, ValueError):
+            arguments[key] = value
+
+    result = _mcp_call("tools/call", {"name": tool_name, "arguments": arguments})
+    content = result.get("result", {}).get("content", [])
+    for item in content:
+        typer.echo(item.get("text", str(item)))
+
+
+@mcp_app.command("status")
+def mcp_status() -> None:
+    """Show MCP server status (modules, skills)."""
+    import json
+
+    result = _mcp_call("dimos/status")
+    data = result.get("result", {})
+    typer.echo(json.dumps(data, indent=2))
+
+
+@mcp_app.command("modules")
+def mcp_modules() -> None:
+    """List deployed modules and their skills."""
+    import json
+
+    result = _mcp_call("dimos/list_modules")
+    data = result.get("result", {})
+    typer.echo(json.dumps(data, indent=2))
 
 
 @main.command()
