@@ -371,6 +371,21 @@ def mcp_modules() -> None:
     typer.echo(json.dumps(data, indent=2))
 
 
+@main.command("agent-send")
+def agent_send(
+    message: str = typer.Argument(..., help="Message to send to the running agent"),
+    port: int = typer.Option(9990, "--port", "-p", help="MCP server port"),
+) -> None:
+    """Send a message to the running DimOS agent via MCP."""
+    result = _mcp_call("dimos/agent_send", {"message": message}, port=port)
+    if "error" in result:
+        typer.echo(f"Error: {result['error'].get('message', 'unknown')}", err=True)
+        raise typer.Exit(1)
+    content = result.get("result", {}).get("content", [])
+    for item in content:
+        typer.echo(item.get("text", str(item)))
+
+
 @main.command()
 def show_config(ctx: typer.Context) -> None:
     """Show current config settings and their values."""

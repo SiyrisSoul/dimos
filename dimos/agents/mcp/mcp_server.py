@@ -137,6 +137,25 @@ def _handle_dimos_list_modules(req_id: Any, skills: list[SkillInfo]) -> dict[str
     return _jsonrpc_result(req_id, {"modules": modules})
 
 
+def _handle_dimos_agent_send(
+    req_id: Any, params: dict[str, Any], rpc_calls: dict[str, Any]
+) -> dict[str, Any]:
+    """Route a message to the agent's human_input stream via LCM."""
+    message = params.get("message", "")
+    if not message:
+        return _jsonrpc_error(req_id, -32602, "Missing 'message' parameter")
+
+    # Publish on /human_input LCM channel (same as HumanCLI)
+    try:
+        from dimos.core.transport import pLCMTransport
+
+        transport = pLCMTransport("/human_input")
+        transport.publish(message)
+        return _jsonrpc_result_text(req_id, f"Message sent to agent: {message[:100]}")
+    except Exception as e:
+        return _jsonrpc_error(req_id, -32000, f"Failed to send: {e}")
+
+
 async def handle_request(
     request: dict[str, Any],
     skills: list[SkillInfo],
@@ -165,6 +184,8 @@ async def handle_request(
         return _handle_dimos_status(req_id, skills)
     if method == "dimos/list_modules":
         return _handle_dimos_list_modules(req_id, skills)
+    if method == "dimos/agent_send":
+        return _handle_dimos_agent_send(req_id, params, rpc_calls)
     return _jsonrpc_error(req_id, -32601, f"Unknown: {method}")
 
 

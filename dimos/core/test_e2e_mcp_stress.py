@@ -418,3 +418,37 @@ class TestMCPRapidRestart:
 
             coord.stop()
             assert _wait_for_mcp_down(timeout=10), f"MCP failed to stop on cycle {cycle}"
+
+
+@pytest.mark.slow
+class TestAgentSend:
+    """Test dimos agent-send CLI and MCP method."""
+
+    def test_agent_send_via_mcp(self, mcp_blueprint):
+        """dimos/agent_send should route message via LCM."""
+        assert _wait_for_mcp()
+
+        result = _mcp_call("dimos/agent_send", {"message": "hello agent"})
+        assert "result" in result
+        text = result["result"]["content"][0]["text"]
+        assert "hello agent" in text
+
+    def test_agent_send_empty_message(self, mcp_blueprint):
+        """Empty message should return error."""
+        assert _wait_for_mcp()
+
+        result = _mcp_call("dimos/agent_send", {"message": ""})
+        assert "error" in result
+
+    def test_agent_send_cli(self, mcp_blueprint):
+        """dimos agent-send 'hello' should work."""
+        assert _wait_for_mcp()
+
+        result = CliRunner().invoke(main, ["agent-send", "hello from CLI"])
+        assert result.exit_code == 0
+        assert "hello from CLI" in result.output
+
+    def test_agent_send_cli_no_server(self):
+        """dimos agent-send with no server should exit with error."""
+        result = CliRunner().invoke(main, ["agent-send", "hello"])
+        assert result.exit_code == 1
