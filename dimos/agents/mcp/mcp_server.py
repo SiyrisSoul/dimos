@@ -149,7 +149,7 @@ def _handle_dimos_agent_send(
     try:
         from dimos.core.transport import pLCMTransport
 
-        transport = pLCMTransport("/human_input")
+        transport: pLCMTransport[str] = pLCMTransport("/human_input")
         transport.publish(message)
         return _jsonrpc_result_text(req_id, f"Message sent to agent: {message[:100]}")
     except Exception as e:

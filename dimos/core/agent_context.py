@@ -71,6 +71,7 @@ def generate_context(
         "dimos mcp call <tool>     # call a tool",
         "dimos mcp status          # module/skill info via MCP",
         "dimos mcp modules         # module-skill mapping",
+        'dimos agent-send "msg"   # send message to running agent',
         "```",
         "",
     ]
@@ -89,7 +90,7 @@ def generate_context(
     lines.append("Use `dimos mcp list-tools` for full schema, or call via:")
     lines.append("```")
     lines.append(
-        f'curl -s localhost:{mcp_port}/mcp -d \'{"jsonrpc":"2.0","id":1,"method":"tools/list"}\''
+        f'curl -s localhost:{mcp_port}/mcp -d \'{{{"jsonrpc":"2.0","id":1,"method":"tools/list"}}}\''
     )
     lines.append("```")
     lines.append("")
