@@ -20,7 +20,7 @@ from reactivex.disposable import Disposable
 from dimos import spec
 from dimos.core.core import rpc
 from dimos.core.global_config import GlobalConfig, global_config
-from dimos.core.module import Module
+from dimos.core.module import Module, ModuleConfig
 from dimos.core.module_coordinator import ModuleCoordinator
 from dimos.core.stream import In
 from dimos.msgs.geometry_msgs import Twist
@@ -33,27 +33,26 @@ if TYPE_CHECKING:
 logger = setup_logger()
 
 
-class G1Connection(Module):
-    cmd_vel: In[Twist]
-    ip: str | None
+class G1Config(ModuleConfig):
+    ip: str | None = None
     connection_type: str | None = None
-    _global_config: GlobalConfig
+
+
+class G1Connection(Module[G1Config]):
+    default_config = G1Config
+
+    cmd_vel: In[Twist]
+    connection_type: str | None = None
 
     connection: UnitreeWebRTCConnection | None
 
-    def __init__(
-        self,
-        ip: str | None = None,
-        connection_type: str | None = None,
-        cfg: GlobalConfig = global_config,
-        *args: Any,
-        **kwargs: Any,
-    ) -> None:
-        self._global_config = cfg
-        self.ip = ip if ip is not None else self._global_config.robot_ip
-        self.connection_type = connection_type or self._global_config.unitree_connection_type
+    def __init__(self, global_config: GlobalConfig = global_config, **kwargs: Any) -> None:
+        super().__init__(global_config, **kwargs)
+        self.ip = self._global_config.robot_ip if self.config.ip is None else self.config.ip
+        self.connection_type = (
+            self.config.connection_type or self._global_config.unitree_connection_type
+        )
         self.connection = None
-        super().__init__(*args, **kwargs)
 
     @rpc
     def start(self) -> None:

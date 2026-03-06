@@ -22,7 +22,7 @@ from reactivex.disposable import Disposable
 
 from dimos.core.core import rpc
 from dimos.core.global_config import GlobalConfig, global_config
-from dimos.core.module import Module
+from dimos.core.module import Module, ModuleConfig
 from dimos.core.module_coordinator import ModuleCoordinator
 from dimos.core.stream import In, Out
 from dimos.core.transport import LCMTransport
@@ -34,7 +34,17 @@ from dimos.msgs.sensor_msgs import PointCloud2
 from dimos.robot.unitree.go2.connection import Go2ConnectionProtocol
 
 
-class Map(Module):
+class MapConfig(ModuleConfig):
+    voxel_size: float = 0.05
+    cost_resolution: float = 0.05
+    global_publish_interval: float | None = None
+    min_height: float = 0.10
+    max_height: float = 0.5
+
+
+class Map(Module[MapConfig]):
+    default_config = MapConfig
+
     lidar: In[PointCloud2]
     global_map: Out[PointCloud2]
     global_costmap: Out[OccupancyGrid]
@@ -43,30 +53,19 @@ class Map(Module):
     _global_config: GlobalConfig
     _preloaded_occupancy: OccupancyGrid | None = None
 
-    def __init__(  # type: ignore[no-untyped-def]
-        self,
-        voxel_size: float = 0.05,
-        cost_resolution: float = 0.05,
-        global_publish_interval: float | None = None,
-        min_height: float = 0.10,
-        max_height: float = 0.5,
-        cfg: GlobalConfig = global_config,
-        **kwargs,
-    ) -> None:
-        self.voxel_size = voxel_size
-        self.cost_resolution = cost_resolution
-        self.global_publish_interval = global_publish_interval
-        self.min_height = min_height
-        self.max_height = max_height
-        self._global_config = cfg
+    def __init__(self, global_config: GlobalConfig = global_config, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.voxel_size = self.config.voxel_size
+        self.cost_resolution = self.config.cost_resolution
+        self.global_publish_interval = self.config.global_publish_interval
+        self.min_height = self.config.min_height
+        self.max_height = self.config.max_height
         self._point_cloud_accumulator = GeneralPointCloudAccumulator(
             self.voxel_size, self._global_config
         )
 
         if self._global_config.simulation:
             self.min_height = 0.3
-
-        super().__init__(**kwargs)
 
     @rpc
     def start(self) -> None:

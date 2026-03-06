@@ -25,7 +25,7 @@ from dimos import spec
 from dimos.agents.annotation import skill
 from dimos.core.core import rpc
 from dimos.core.global_config import GlobalConfig, global_config
-from dimos.core.module import Module
+from dimos.core.module import Module, ModuleConfig
 from dimos.core.module_coordinator import ModuleCoordinator
 from dimos.core.stream import In, Out
 from dimos.core.transport import LCMTransport, pSHMTransport
@@ -47,6 +47,10 @@ from dimos.utils.decorators.decorators import simple_mcache
 from dimos.utils.testing.replay import TimedSensorReplay, TimedSensorStorage
 
 logger = logging.getLogger(__name__)
+
+
+class ConnectionConfig(ModuleConfig):
+    ip: str | None = None
 
 
 class Go2ConnectionProtocol(Protocol):
@@ -147,7 +151,9 @@ class ReplayConnection(UnitreeWebRTCConnection):
         return {"status": "ok", "message": "Fake publish"}
 
 
-class GO2Connection(Module, spec.Camera, spec.Pointcloud):
+class GO2Connection(Module[ConnectionConfig], spec.Camera, spec.Pointcloud):
+    default_config = ConnectionConfig
+
     cmd_vel: In[Twist]
     pointcloud: Out[PointCloud2]
     odom: Out[PoseStamped]
@@ -157,7 +163,6 @@ class GO2Connection(Module, spec.Camera, spec.Pointcloud):
 
     connection: Go2ConnectionProtocol
     camera_info_static: CameraInfo = _camera_info_static()
-    _global_config: GlobalConfig
     _camera_info_thread: Thread | None = None
     _latest_video_frame: Image | None = None
 
@@ -171,16 +176,10 @@ class GO2Connection(Module, spec.Camera, spec.Pointcloud):
             ),
         ]
 
-    def __init__(  # type: ignore[no-untyped-def]
-        self,
-        ip: str | None = None,
-        cfg: GlobalConfig = global_config,
-        *args,
-        **kwargs,
-    ) -> None:
-        self._global_config = cfg
+    def __init__(self, global_config: GlobalConfig = global_config, **kwargs: Any) -> None:
+        super().__init__(global_config, **kwargs)
 
-        ip = ip if ip is not None else self._global_config.robot_ip
+        ip = self.config.ip or self._global_config.robot_ip
 
         connection_type = self._global_config.unitree_connection_type
 
@@ -193,8 +192,6 @@ class GO2Connection(Module, spec.Camera, spec.Pointcloud):
         else:
             assert ip is not None, "IP address must be provided"
             self.connection = UnitreeWebRTCConnection(ip)
-
-        Module.__init__(self, *args, **kwargs)
 
     @rpc
     def record(self, recording_name: str) -> None:

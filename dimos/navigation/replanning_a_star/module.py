@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+from typing import Any
 
 from dimos_lcm.std_msgs import Bool, String
 from reactivex.disposable import Disposable
@@ -41,11 +42,9 @@ class ReplanningAStarPlanner(Module, NavigationInterface):
     navigation_costmap: Out[OccupancyGrid]
 
     _planner: GlobalPlanner
-    _global_config: GlobalConfig
 
-    def __init__(self, cfg: GlobalConfig = global_config) -> None:
-        super().__init__()
-        self._global_config = cfg
+    def __init__(self, global_config: GlobalConfig = global_config, **kwargs: Any) -> None:
+        super().__init__(global_config, **kwargs)
         self._planner = GlobalPlanner(self._global_config)
 
     @rpc

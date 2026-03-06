@@ -304,7 +304,7 @@ def _worker_loop(conn: Connection, instances: dict[int, Any], worker_id: int) ->
 
             if req_type == "deploy_module":
                 module_class = request["module_class"]
-                request["global_config"]
+                global_config = request["global_config"]
                 kwargs = request.get("kwargs", {})
                 module_id = request["module_id"]
                 instance = module_class(global_config, **kwargs)

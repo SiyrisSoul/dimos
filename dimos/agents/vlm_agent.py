@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from langchain.chat_models import init_chat_model
@@ -20,6 +19,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from dimos.agents.system_prompt import SYSTEM_PROMPT
 from dimos.core.core import rpc
+from dimos.core.global_config import GlobalConfig, global_config
 from dimos.core.module import Module, ModuleConfig
 from dimos.core.stream import In, Out
 from dimos.msgs.sensor_msgs import Image
@@ -31,24 +31,22 @@ if TYPE_CHECKING:
 logger = setup_logger()
 
 
-@dataclass
 class VLMAgentConfig(ModuleConfig):
     model: str = "gpt-4o"
     system_prompt: str | None = SYSTEM_PROMPT
 
 
-class VLMAgent(Module):
+class VLMAgent(Module[VLMAgentConfig]):
     """Stream-first agent for vision queries with optional RPC access."""
 
-    default_config: type[VLMAgentConfig] = VLMAgentConfig
-    config: VLMAgentConfig
+    default_config = VLMAgentConfig
 
     color_image: In[Image]
     query_stream: In[HumanMessage]
     answer_stream: Out[AIMessage]
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(self, global_config: GlobalConfig = global_config, **kwargs: Any) -> None:
+        super().__init__(global_config, **kwargs)
 
         if self.config.model.startswith("ollama:"):
             from dimos.agents.ollama_agent import ensure_ollama_model

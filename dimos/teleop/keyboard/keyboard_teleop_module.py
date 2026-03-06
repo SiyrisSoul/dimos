@@ -28,7 +28,6 @@ Keyboard controls:
     ESC: Quit
 """
 
-from dataclasses import dataclass
 import os
 import threading
 import time
@@ -43,6 +42,7 @@ except ImportError:
 
 from dimos.control.examples.cartesian_ik_jogger import JogState
 from dimos.core.core import rpc
+from dimos.core.global_config import GlobalConfig, global_config
 from dimos.core.module import Module, ModuleConfig
 from dimos.core.stream import Out
 from dimos.msgs.geometry_msgs import PoseStamped
@@ -64,7 +64,6 @@ def _clamp(value: float, min_val: float, max_val: float) -> float:
     return max(min_val, min(max_val, value))
 
 
-@dataclass
 class KeyboardTeleopConfig(ModuleConfig):
     model_path: str = ""
     ee_joint_id: int = 6
@@ -84,8 +83,8 @@ class KeyboardTeleopModule(Module[KeyboardTeleopConfig]):
     _stop_event: threading.Event
     _thread: threading.Thread | None = None
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(self, global_config: GlobalConfig = global_config, **kwargs: Any) -> None:
+        super().__init__(global_config, **kwargs)
         self._stop_event = threading.Event()
 
     @rpc

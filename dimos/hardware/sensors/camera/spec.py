@@ -62,8 +62,6 @@ class DepthCameraConfig(CameraConfig):
 class DepthCameraHardware(ABC):
     """Abstract class for depth camera modules (RealSense, ZED, etc.)."""
 
-    config: DepthCameraConfig
-
     @abstractmethod
     def get_color_camera_info(self) -> CameraInfo | None:
         """Get color camera intrinsics."""

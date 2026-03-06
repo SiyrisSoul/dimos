@@ -68,7 +68,6 @@ class Frame:
     image: Image
 
 
-@dataclass
 class TemporalMemoryConfig(ModuleConfig):
     vlm: VlModel[Any] | None = None
 

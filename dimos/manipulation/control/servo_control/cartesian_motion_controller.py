@@ -26,13 +26,13 @@ Architecture:
 - Supports velocity-based and position-based control modes
 """
 
-from dataclasses import dataclass
 import math
 import threading
 import time
 from typing import Any
 
 from dimos.core.core import rpc
+from dimos.core.global_config import GlobalConfig, global_config
 from dimos.core.module import Module, ModuleConfig
 from dimos.core.stream import In, Out
 from dimos.msgs.geometry_msgs import Pose, PoseStamped, Quaternion, Twist, Vector3
@@ -43,9 +43,10 @@ from dimos.utils.simple_controller import PIDController
 logger = setup_logger()
 
 
-@dataclass
 class CartesianMotionControllerConfig(ModuleConfig):
     """Configuration for Cartesian motion controller."""
+
+    arm_driver: Any = None
 
     # Control loop parameters
     control_frequency: float = 20.0  # Hz - Cartesian control loop rate
@@ -78,7 +79,7 @@ class CartesianMotionControllerConfig(ModuleConfig):
     control_frame: str = "world"  # Frame for target poses (world, base_link, etc.)
 
 
-class CartesianMotionController(Module):
+class CartesianMotionController(Module[CartesianMotionControllerConfig]):
     """
     Hardware-agnostic Cartesian motion controller.
 
@@ -94,7 +95,6 @@ class CartesianMotionController(Module):
     """
 
     default_config = CartesianMotionControllerConfig
-    config: CartesianMotionControllerConfig  # Type hint for proper attribute access
 
     # RPC methods to request from other modules (resolved at blueprint build time)
     rpc_calls = [
@@ -112,7 +112,7 @@ class CartesianMotionController(Module):
     cartesian_velocity: Out[Twist] = None  # type: ignore[assignment]
     current_pose: Out[PoseStamped] = None  # type: ignore[assignment]
 
-    def __init__(self, arm_driver: Any = None, *args: Any, **kwargs: Any) -> None:
+    def __init__(self, global_config: GlobalConfig = global_config, **kwargs: Any) -> None:
         """
         Initialize the Cartesian motion controller.
 
@@ -120,10 +120,10 @@ class CartesianMotionController(Module):
             arm_driver: (Optional) Hardware driver reference (legacy mode).
                        When using blueprints, this is resolved automatically via rpc_calls.
         """
-        super().__init__(*args, **kwargs)
+        super().__init__(global_config, **kwargs)
 
         # Hardware driver reference - set via arm_driver param (legacy) or RPC wiring (blueprint)
-        self._arm_driver_legacy = arm_driver
+        self._arm_driver_legacy = self.config.arm_driver
 
         # State tracking
         self._latest_joint_state: JointState | None = None

@@ -22,7 +22,6 @@ deltas from an initial orientation captured on engage, converts to TwistStamped
 velocity commands via configurable gains, and publishes.
 """
 
-from dataclasses import dataclass
 from pathlib import Path
 import threading
 import time
@@ -35,6 +34,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from dimos.core.core import rpc
+from dimos.core.global_config import GlobalConfig, global_config
 from dimos.core.module import Module, ModuleConfig
 from dimos.core.stream import Out
 from dimos.msgs.geometry_msgs import Twist, TwistStamped, Vector3
@@ -48,7 +48,6 @@ logger = setup_logger()
 STATIC_DIR = Path(__file__).parent / "web" / "static"
 
 
-@dataclass
 class PhoneTeleopConfig(ModuleConfig):
     control_loop_hz: float = 50.0
     linear_gain: float = 1.0 / 30.0  # Gain: maps degrees of tilt to m/s. 30 deg -> 1.0 m/s
@@ -75,8 +74,8 @@ class PhoneTeleopModule(Module[PhoneTeleopConfig]):
     # Initialization
     # -------------------------------------------------------------------------
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(self, global_config: GlobalConfig = global_config, **kwargs: Any) -> None:
+        super().__init__(global_config, **kwargs)
 
         self._is_engaged: bool = False
         self._teleop_button: bool = False

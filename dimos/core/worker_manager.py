@@ -82,12 +82,12 @@ class WorkerManager:
         def _deploy(
             item: tuple[Worker, type[ModuleBase], GlobalConfig, dict[str, Any]],
         ) -> RPCClient:
-            worker, module_class, args, kwargs = item
+            worker, module_class, global_config, kwargs = item
             actor = worker.deploy_module(module_class, global_config=global_config, kwargs=kwargs)
             return RPCClient(actor, module_class)
 
         with ThreadPoolExecutor(max_workers=len(assignments)) as pool:
-            results = list(pool.map(_deploy, assignments))
+            results = list(pool.map(_deploy, assignments, timeout=30))
 
         return results
 

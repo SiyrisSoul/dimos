@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict
 import time
 
+from pydantic import Field
 from reactivex import operators as ops
 
 from dimos.core.core import rpc
@@ -33,10 +34,9 @@ from dimos.utils.logging_config import setup_logger
 logger = setup_logger()
 
 
-@dataclass
 class Config(ModuleConfig):
     algo: str = "height_cost"
-    config: OccupancyConfig = field(default_factory=HeightCostConfig)
+    config: OccupancyConfig = Field(default_factory=HeightCostConfig)
 
 
 class CostMapper(Module[Config]):

@@ -13,10 +13,10 @@
 # limitations under the License.
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
 import time
 from typing import Any
 
+from pydantic import Field
 import reactivex as rx
 
 from dimos.agents.annotation import skill
@@ -42,10 +42,9 @@ def default_transform() -> Transform:
     )
 
 
-@dataclass
 class CameraModuleConfig(ModuleConfig):
     frame_id: str = "camera_link"
-    transform: Transform | None = field(default_factory=default_transform)
+    transform: Transform | None = Field(default_factory=default_transform)
     hardware: Callable[[], CameraHardware[Any]] | CameraHardware[Any] = Webcam
     frequency: float = 0.0  # Hz, 0 means no limit
 

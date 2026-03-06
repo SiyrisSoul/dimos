@@ -22,7 +22,7 @@ from reactivex.disposable import Disposable
 
 from dimos.core.core import rpc
 from dimos.core.global_config import GlobalConfig, global_config
-from dimos.core.module import Module
+from dimos.core.module import Module, ModuleConfig
 from dimos.core.stream import In, Out
 from dimos.msgs.geometry_msgs import (
     PoseStamped,
@@ -60,28 +60,26 @@ def _camera_info_static() -> CameraInfo:
     )
 
 
-class G1SimConnection(Module):
+class G1SimConfig(ModuleConfig):
+    ip: str | None = None
+
+
+class G1SimConnection(Module[G1SimConfig]):
+    default_config = G1SimConfig
+
     cmd_vel: In[Twist]
     lidar: Out[PointCloud2]
     odom: Out[PoseStamped]
     color_image: Out[Image]
     camera_info: Out[CameraInfo]
     ip: str | None
-    _global_config: GlobalConfig
     _camera_info_thread: Thread | None = None
 
-    def __init__(
-        self,
-        ip: str | None = None,
-        cfg: GlobalConfig = global_config,
-        *args: Any,
-        **kwargs: Any,
-    ) -> None:
-        self._global_config = cfg
-        self.ip = ip if ip is not None else self._global_config.robot_ip
+    def __init__(self, global_config: GlobalConfig = global_config, **kwargs: Any) -> None:
+        super().__init__(global_config, **kwargs)
+        self.ip = self._global_config.robot_ip if self.config.ip is None else self.config.ip
         self.connection: MujocoConnection | None = None
         self._stop_event = threading.Event()
-        super().__init__(*args, **kwargs)
 
     @rpc
     def start(self) -> None:
