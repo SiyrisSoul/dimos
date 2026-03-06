@@ -115,6 +115,17 @@ def run(
     cli_config_overrides: dict[str, Any] = ctx.obj
     global_config.update(**cli_config_overrides)
 
+    import time as _time
+
+    from dimos.constants import DIMOS_LOG_DIR
+    from dimos.utils.logging_config import set_run_log_dir
+
+    blueprint_name = "-".join(robot_types)
+    safe_name = blueprint_name.replace("/", "-").replace(" ", "-")
+    run_id = f"{_time.strftime('%Y%m%d-%H%M%S')}-{safe_name}"
+    log_dir = DIMOS_LOG_DIR / run_id
+    set_run_log_dir(log_dir)
+    logger.info("Logging to", log_dir=str(log_dir))
     blueprint = autoconnect(*map(get_by_name, robot_types))
     dimos = blueprint.build(cli_config_overrides=cli_config_overrides)
     dimos.loop()

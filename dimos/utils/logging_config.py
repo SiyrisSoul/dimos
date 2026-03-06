@@ -38,6 +38,22 @@ logging.getLogger("asyncio").setLevel(logging.ERROR)
 
 _LOG_FILE_PATH = None
 
+_RUN_LOG_DIR: Path | None = None
+
+
+def set_run_log_dir(log_dir: str | Path) -> None:
+    """Set per-run log directory. Call BEFORE blueprint.build()."""
+    global _RUN_LOG_DIR, _LOG_FILE_PATH
+    log_dir = Path(log_dir)
+    _RUN_LOG_DIR = log_dir
+    _RUN_LOG_DIR.mkdir(parents=True, exist_ok=True)
+    _LOG_FILE_PATH = None
+    os.environ["DIMOS_RUN_LOG_DIR"] = str(log_dir)
+
+
+def get_run_log_dir() -> Path | None:
+    return _RUN_LOG_DIR
+
 
 def _get_log_directory() -> Path:
     # Check if running from a git repository
@@ -61,6 +77,13 @@ def _get_log_directory() -> Path:
 
 
 def _get_log_file_path() -> Path:
+    if _RUN_LOG_DIR is not None:
+        return _RUN_LOG_DIR / "main.jsonl"
+    env_log_dir = os.environ.get("DIMOS_RUN_LOG_DIR")
+    if env_log_dir:
+        p = Path(env_log_dir)
+        p.mkdir(parents=True, exist_ok=True)
+        return p / "main.jsonl"
     log_dir = _get_log_directory()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     pid = os.getpid()
@@ -229,21 +252,22 @@ def setup_logger(*, level: int | None = None) -> Any:
     console_formatter = structlog.stdlib.ProcessorFormatter(
         processor=_compact_console_processor,
     )
+
     console_handler.setFormatter(console_formatter)
     stdlib_logger.addHandler(console_handler)
 
-    # Create rotating file handler with JSON formatting.
-    file_handler = logging.handlers.RotatingFileHandler(
+    # Create file handler with JSON formatting.
+    file_handler = logging.FileHandler(
         log_file_path,
         mode="a",
-        maxBytes=10 * 1024 * 1024,  # 10MiB
-        backupCount=20,
         encoding="utf-8",
     )
+
     file_handler.setLevel(level)
     file_formatter = structlog.stdlib.ProcessorFormatter(
         processor=structlog.processors.JSONRenderer(),
     )
+
     file_handler.setFormatter(file_formatter)
     stdlib_logger.addHandler(file_handler)
 
