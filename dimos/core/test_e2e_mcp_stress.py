@@ -452,3 +452,32 @@ class TestAgentSend:
         """dimos agent-send with no server should exit with error."""
         result = CliRunner().invoke(main, ["agent-send", "hello"])
         assert result.exit_code == 1
+
+
+@pytest.mark.slow
+class TestModuleVisualization:
+    """Test module IO introspection via MCP."""
+
+    def test_module_io_returns_skills_with_params(self, mcp_blueprint):
+        """dimos/module_io should return skills grouped by module with parameters."""
+        assert _wait_for_mcp()
+
+        result = _mcp_call("dimos/module_io")
+        assert "result" in result
+        data = result["result"]
+        assert "modules" in data
+        assert "StressTestModule" in data["modules"]
+
+        stress_mod = data["modules"]["StressTestModule"]
+        assert stress_mod["skill_count"] >= 4
+        skill_names = [s["name"] for s in stress_mod["skills"]]
+        assert "echo" in skill_names
+        assert "ping" in skill_names
+
+    def test_module_io_cli(self, mcp_blueprint):
+        """dimos mcp module-io should output module info."""
+        assert _wait_for_mcp()
+
+        result = CliRunner().invoke(main, ["mcp", "module-io"])
+        assert result.exit_code == 0
+        assert "StressTestModule" in result.output

@@ -156,6 +156,27 @@ def _handle_dimos_agent_send(
         return _jsonrpc_error(req_id, -32000, f"Failed to send: {e}")
 
 
+def _handle_dimos_module_io(req_id: Any, skills: list[SkillInfo]) -> dict[str, Any]:
+    """Return module IO information: skills grouped by module with schema."""
+    modules: dict[str, dict[str, Any]] = {}
+    for s in skills:
+        if s.class_name not in modules:
+            modules[s.class_name] = {"skills": [], "skill_count": 0}
+        mod = modules[s.class_name]
+        schema = json.loads(s.args_schema)
+        description = schema.pop("description", "")
+        schema.pop("title", None)
+        mod["skills"].append(
+            {
+                "name": s.func_name,
+                "description": description,
+                "parameters": schema,
+            }
+        )
+        mod["skill_count"] += 1
+    return _jsonrpc_result(req_id, {"modules": modules, "module_count": len(modules)})
+
+
 async def handle_request(
     request: dict[str, Any],
     skills: list[SkillInfo],
@@ -184,6 +205,8 @@ async def handle_request(
         return _handle_dimos_status(req_id, skills)
     if method == "dimos/list_modules":
         return _handle_dimos_list_modules(req_id, skills)
+    if method == "dimos/module_io":
+        return _handle_dimos_module_io(req_id, skills)
     if method == "dimos/agent_send":
         return _handle_dimos_agent_send(req_id, params, rpc_calls)
     return _jsonrpc_error(req_id, -32601, f"Unknown: {method}")
