@@ -26,6 +26,6 @@ unitree_g1_onboard = autoconnect(
     _mapper,
     websocket_vis(),
     G1HighLevelDdsSdk.blueprint(),
-).global_config(n_dask_workers=4, robot_model="unitree_g1")
+).global_config(n_workers=4, robot_model="unitree_g1")
 
 __all__ = ["unitree_g1_onboard"]

@@ -34,6 +34,6 @@ unitree_g1_rosnav_onboard = autoconnect(
         lidar_gateway=os.getenv("ROSNAV_LIDAR_GATEWAY", "192.168.123.1"),
         lidar_ip=os.getenv("ROSNAV_LIDAR_IP", "192.168.123.120"),
     ),
-).global_config(n_dask_workers=6, robot_model="unitree_g1")
+).global_config(n_workers=6, robot_model="unitree_g1")
 
 __all__ = ["unitree_g1_rosnav_onboard"]

@@ -114,7 +114,7 @@ class ROSNavConfig(DockerModuleConfig):
     docker_entrypoint: str = "/usr/local/bin/entrypoint.sh"
     docker_file: Path = Path(__file__).parent / "Dockerfile"
     docker_build_context: Path = Path(__file__).parent.parent.parent.parent
-    docker_build_ssh: bool = True
+    docker_build_extra_args: list[str] = field(default_factory=lambda: ["--network", "host"])
     docker_build_args: dict[str, str] = field(
         default_factory=lambda: {
             "TARGETARCH": "arm64" if platform.machine() == "aarch64" else "amd64"

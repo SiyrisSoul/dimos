@@ -15,36 +15,55 @@
 
 """Visualization sub-blueprint: Rerun viewer with G1-specific visual overrides."""
 
+from typing import Any
+
 from dimos.core.global_config import global_config
 from dimos.protocol.pubsub.impl.lcmpubsub import LCM
 from dimos.visualization.vis_module import vis_module
+
+
+def _convert_camera_info(camera_info: Any) -> Any:
+    return camera_info.to_rerun(
+        image_topic="/world/color_image",
+        optical_frame="camera_optical",
+    )
+
+
+def _convert_global_map(grid: Any) -> Any:
+    return grid.to_rerun(voxel_size=0.1, mode="boxes")
+
+
+def _convert_navigation_costmap(grid: Any) -> Any:
+    return grid.to_rerun(
+        colormap="Accent",
+        z_offset=0.015,
+        opacity=0.2,
+        background="#484981",
+    )
+
+
+def _static_base_link(rr: Any) -> list[Any]:
+    return [
+        rr.Boxes3D(
+            half_sizes=[0.2, 0.15, 0.75],
+            colors=[(0, 255, 127)],
+            fill_mode="MajorWireframe",
+        ),
+        rr.Transform3D(parent_frame="tf#/base_link"),
+    ]
+
 
 _vis = vis_module(
     viewer_backend=global_config.viewer_backend,
     rerun_config={
         "pubsubs": [LCM(autoconf=True)],
         "visual_override": {
-            "world/camera_info": lambda camera_info: camera_info.to_rerun(
-                image_topic="/world/color_image",
-                optical_frame="camera_optical",
-            ),
-            "world/global_map": lambda grid: grid.to_rerun(voxel_size=0.1, mode="boxes"),
-            "world/navigation_costmap": lambda grid: grid.to_rerun(
-                colormap="Accent",
-                z_offset=0.015,
-                opacity=0.2,
-                background="#484981",
-            ),
+            "world/camera_info": _convert_camera_info,
+            "world/global_map": _convert_global_map,
+            "world/navigation_costmap": _convert_navigation_costmap,
         },
         "static": {
-            "world/tf/base_link": lambda rr: [
-                rr.Boxes3D(
-                    half_sizes=[0.2, 0.15, 0.75],
-                    colors=[(0, 255, 127)],
-                    fill_mode="MajorWireframe",
-                ),
-                rr.Transform3D(parent_frame="tf#/base_link"),
-            ]
+            "world/tf/base_link": _static_base_link,
         },
     },
 )

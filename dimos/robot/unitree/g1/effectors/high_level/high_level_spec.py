@@ -21,7 +21,7 @@ a single, stable API.
 
 from typing import Any, Protocol
 
-from dimos.core import In
+from dimos.core.stream import In
 from dimos.msgs.geometry_msgs import Twist
 from dimos.spec.utils import Spec
 
